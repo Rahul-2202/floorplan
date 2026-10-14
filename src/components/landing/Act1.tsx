@@ -223,8 +223,8 @@ export function Act1() {
             className="mt-7 flex items-center gap-3"
           >
             <Button href="#demo">Book a demo</Button>
-            <Button href="/office" variant="secondary">
-              Walk into the office →
+            <Button href="/start" variant="secondary">
+              Set up your office →
             </Button>
           </motion.div>
           </div>

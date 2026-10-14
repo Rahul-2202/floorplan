@@ -78,6 +78,7 @@ export function AdaCard({ onClose }: { onClose: () => void }) {
       animate={{ opacity: 1, y: 0, scale: 1 }}
       exit={{ opacity: 0, y: 6, scale: 0.97 }}
       transition={{ type: "spring", stiffness: 380, damping: 30 }}
+      data-tour="ada-card"
       className="mb-2 w-[440px] overflow-hidden rounded-[24px] bg-white shadow-[0_24px_60px_-16px_rgba(0,0,0,0.4)] ring-1 ring-black/[0.06]"
     >
       <div className="flex items-start gap-3 bg-[linear-gradient(135deg,#fff4ec,#ffffff)] p-4">

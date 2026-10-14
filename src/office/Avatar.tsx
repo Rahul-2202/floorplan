@@ -191,6 +191,7 @@ export function Avatar({
   return (
     <motion.div
       className="absolute left-0 top-0"
+      data-agent={member.id}
       style={{ x, y, zIndex: z }}
       initial={{ opacity: 0 }}
       animate={{ opacity: 1 }}

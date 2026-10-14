@@ -48,6 +48,7 @@ export function AgentCard({ id, summoned, onSendBack, onClose }: { id: string; s
       animate={{ opacity: 1, y: 0, scale: 1 }}
       exit={{ opacity: 0, y: 6, scale: 0.97 }}
       transition={{ type: "spring", stiffness: 380, damping: 30 }}
+      data-tour="agent-card"
       className="my-2 w-[440px] overflow-hidden rounded-[24px] bg-white shadow-[0_24px_60px_-16px_rgba(0,0,0,0.4)] ring-1 ring-black/[0.06]"
     >
       {/* header */}

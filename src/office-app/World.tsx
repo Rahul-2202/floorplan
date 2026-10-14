@@ -43,7 +43,7 @@ function Player({ x, y, walking }: { x: ReturnType<typeof usePlayer>["x"]; y: Re
         </div>
         <div className="absolute bottom-full left-1/2" style={{ width: 0 }}>
           <div className="counter absolute bottom-[3px] left-0 -translate-x-1/2 whitespace-nowrap" style={{ ["--origin" as string]: "50% 100%" }}>
-            <div className="rounded-full bg-ink px-2 py-[2px] text-[10.5px] font-bold text-white shadow-md">You</div>
+            <div data-tour="player" className="rounded-full bg-ink px-2 py-[2px] text-[10.5px] font-bold text-white shadow-md">You</div>
           </div>
         </div>
       </div>
@@ -444,7 +444,7 @@ export function World() {
         )}
       </AnimatePresence>
 
-      <div className="absolute bottom-4 left-4 z-30 flex flex-col overflow-hidden rounded-[14px] bg-white/90 shadow-[var(--shadow-card)] ring-1 ring-black/[0.06] backdrop-blur md:left-[236px]">
+      <div data-tour="zoom" className="absolute bottom-4 left-4 z-30 flex flex-col overflow-hidden rounded-[14px] bg-white/90 shadow-[var(--shadow-card)] ring-1 ring-black/[0.06] backdrop-blur md:left-[236px]">
         <button onClick={() => setZoom((z) => Math.min(4.2, z + 0.4))} className="grid h-9 w-9 place-items-center text-[18px] font-semibold text-ink hover:bg-black/5" aria-label="Zoom in">
           +
         </button>
@@ -471,7 +471,7 @@ function Minimap({ px, py, live, onGo }: { px: ReturnType<typeof usePlayer>["x"]
   const dotY = useTransform(py, (v) => (v / TILE) * k - 3);
   const colors: Record<string, string> = { ceo: "#dcbf96", dev: "#cdd5c3", marketing: "#dcd5e8", meeting: "#e6cfbe" };
   return (
-    <div className="absolute bottom-4 left-4 z-30 hidden rounded-[16px] bg-white/90 p-2 shadow-[var(--shadow-card)] ring-1 ring-black/[0.06] backdrop-blur md:block">
+    <div data-tour="minimap" className="absolute bottom-4 left-4 z-30 hidden rounded-[16px] bg-white/90 p-2 shadow-[var(--shadow-card)] ring-1 ring-black/[0.06] backdrop-blur md:block">
       <div
         className="relative cursor-pointer overflow-hidden rounded-[10px] bg-[#f0ebe2]"
         style={{ width: W, height: H }}

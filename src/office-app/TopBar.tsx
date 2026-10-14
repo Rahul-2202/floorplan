@@ -31,7 +31,7 @@ function Jump() {
   const agents = Object.keys(s.live).filter((id) => (CAST[id]?.name ?? id).toLowerCase().includes(q.toLowerCase()) || (CAST[id]?.role ?? "").toLowerCase().includes(q.toLowerCase()));
   const rooms = (["ceo", "dev", "marketing", "meeting"] as const).filter((r) => ROOM_LABEL[r].toLowerCase().includes(q.toLowerCase()));
   return (
-    <div className="relative">
+    <div className="relative" data-tour="jump">
       <button onClick={() => setOpen((v) => !v)} className="flex h-9 items-center gap-2 rounded-full bg-[#f2f0ec] px-3 text-[12.5px] font-medium text-muted hover:bg-[#e9e6df]">
         {Icon.search} Jump to a room or agent
       </button>
@@ -130,12 +130,13 @@ export function TopBar() {
       </div>
 
       <div className="flex items-center gap-1.5 rounded-full bg-white/95 p-1.5 shadow-[var(--shadow-card)] ring-1 ring-black/[0.06] backdrop-blur">
-        <button onClick={() => ui.openWin({ kind: "assign" })} className="flex h-9 items-center gap-1.5 rounded-full bg-ink px-3.5 text-[13px] font-semibold text-white hover:bg-black">
+        <button data-tour="assign" onClick={() => ui.openWin({ kind: "assign" })} className="flex h-9 items-center gap-1.5 rounded-full bg-ink px-3.5 text-[13px] font-semibold text-white hover:bg-black">
           {Icon.plus} Assign task
         </button>
         {TOOLS.map((t) => (
           <button
             key={t.k}
+            data-tour={t.k}
             onClick={() => (ui.panel === t.k ? ui.closePanel() : ui.openPanel(t.k))}
             title={t.l}
             className={`group relative grid h-9 w-9 place-items-center rounded-full transition-colors ${ui.panel === t.k ? "bg-ink text-white" : "text-ink-2 hover:bg-black/5"}`}

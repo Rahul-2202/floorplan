@@ -18,7 +18,7 @@ export function Toasts() {
   }, [s.toasts, d]);
 
   return (
-    <div className={`pointer-events-none absolute top-[68px] z-[45] flex w-[340px] flex-col gap-2 transition-[right] duration-300 ${ui.panel ? "right-[484px]" : "right-3"}`}>
+    <div data-tour="toasts" className={`pointer-events-none absolute top-[68px] z-[45] flex w-[340px] flex-col gap-2 transition-[right] duration-300 ${ui.panel ? "right-[484px]" : "right-3"}`}>
       <AnimatePresence initial={false}>
         {s.toasts.map((t) => (
           <motion.div

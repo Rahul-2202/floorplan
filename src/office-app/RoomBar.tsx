@@ -31,6 +31,7 @@ export function RoomBar({ room }: { room: string | null }) {
             animate={{ opacity: 1, y: 0 }}
             exit={{ opacity: 0, y: -6 }}
             transition={{ duration: 0.25 }}
+            data-tour="roombar"
             className="pointer-events-auto flex items-center gap-2 rounded-full bg-white/95 py-1.5 pl-2 pr-1.5 shadow-[var(--shadow-card)] ring-1 ring-black/[0.06] backdrop-blur"
           >
             {cfg && <Face id={cfg.head} size={26} />}

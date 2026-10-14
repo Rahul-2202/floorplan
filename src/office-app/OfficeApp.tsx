@@ -1,6 +1,6 @@
 "use client";
 
-import { useEffect, useState } from "react";
+import { useEffect, useState, type ReactNode } from "react";
 import { useEngine } from "@/sim/engine";
 import { SimProvider } from "@/sim/store";
 import { MobileOffice } from "./MobileOffice";
@@ -11,7 +11,7 @@ import { UIProvider, useUI } from "./ui";
 import { WindowRouter } from "./windows";
 import { World } from "./World";
 
-function Shell() {
+function Shell({ overlay }: { overlay?: ReactNode }) {
   const [mobile, setMobile] = useState(false);
   useEffect(() => {
     const mq = window.matchMedia("(max-width: 899px)");
@@ -20,7 +20,7 @@ function Shell() {
     mq.addEventListener("change", on);
     return () => mq.removeEventListener("change", on);
   }, []);
-  return mobile ? <MobileShell /> : <DesktopShell />;
+  return mobile ? <MobileShell /> : <DesktopShell overlay={overlay} />;
 }
 
 function MobileShell() {
@@ -28,7 +28,7 @@ function MobileShell() {
   return <MobileOffice />;
 }
 
-function DesktopShell() {
+function DesktopShell({ overlay }: { overlay?: ReactNode }) {
   const ui = useUI();
   // Agents you're talking to don't wander off.
   const busy = [ui.card, ui.win?.id].filter(Boolean) as string[];
@@ -51,11 +51,13 @@ function DesktopShell() {
       <Toasts />
       <PanelRouter />
       <WindowRouter />
+      {overlay}
     </div>
   );
 }
 
-export function OfficeApp() {
+/** The office. `overlay` renders inside the app (used by the guided tour). */
+export function OfficeApp({ overlay }: { overlay?: ReactNode } = {}) {
   const [ok, setOk] = useState(false);
   useEffect(() => {
     const t = setTimeout(() => setOk(true), 0);
@@ -63,7 +65,7 @@ export function OfficeApp() {
   }, []);
   return (
     <SimProvider>
-      <UIProvider>{ok ? <Shell /> : <div className="fixed inset-0 bg-[#e9e3d8]" />}</UIProvider>
+      <UIProvider>{ok ? <Shell overlay={overlay} /> : <div className="fixed inset-0 bg-[#e9e3d8]" />}</UIProvider>
     </SimProvider>
   );
 }
