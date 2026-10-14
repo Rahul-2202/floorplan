@@ -107,6 +107,11 @@ export function EverywhereSection() {
         second="Your phone is the shortcut."
         sub="On desktop you see the whole company at a glance: who's working, who's blocked, who's waiting at your door. On mobile it folds into a simple list of what needs you. Talk to Ada by text or voice on both."
       />
+      <Reveal delay={0.1} className="mt-6 flex justify-center">
+        <a href="/office" className="inline-flex h-11 items-center gap-2 rounded-full bg-ink px-5 text-[14px] font-semibold text-white hover:bg-black" style={{ fontFamily: "var(--font-display)" }}>
+          Walk around the demo office →
+        </a>
+      </Reveal>
       <div className="mx-auto mt-14 grid max-w-[1180px] items-center gap-10 lg:grid-cols-[1.6fr_1fr]">
         <Reveal>
           <div className="relative aspect-[16/10] w-full overflow-hidden rounded-[28px] shadow-[0_2px_4px_rgba(10,10,10,0.04),0_40px_100px_-30px_rgba(10,10,10,0.3)] ring-1 ring-black/[0.06]">

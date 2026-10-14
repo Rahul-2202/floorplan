@@ -127,8 +127,8 @@ export function CtaSection() {
           />
           <Reveal delay={0.15} className="mt-8 flex gap-3">
             <Button href="#demo">Book a demo</Button>
-            <Button href="#top" variant="secondary" className="!bg-white hover:!bg-white/80">
-              Back to the start
+            <Button href="/office" variant="secondary" className="!bg-white hover:!bg-white/80">
+              Try the live demo →
             </Button>
           </Reveal>
         </div>

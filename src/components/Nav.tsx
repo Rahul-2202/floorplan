@@ -38,9 +38,14 @@ export function Nav() {
             </a>
           ))}
         </nav>
-        <Button href="#demo" className="!h-10 !px-5 !text-[14px]">
-          Book a demo
-        </Button>
+        <div className="flex items-center gap-2">
+          <Button href="/office" variant="secondary" className="!hidden !h-10 !px-4 !text-[14px] sm:!inline-flex">
+            Try the office
+          </Button>
+          <Button href="#demo" className="!h-10 !px-5 !text-[14px]">
+            Book a demo
+          </Button>
+        </div>
       </div>
     </motion.header>
   );

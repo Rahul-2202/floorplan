@@ -49,6 +49,15 @@ function buildGrid() {
 
 const key = (x: number, y: number) => y * GW + x;
 
+/** True when a feet position (in tiles) is free to stand on. */
+export function isWalkable(x: number, y: number) {
+  if (!grid) grid = buildGrid();
+  const cx = Math.floor(x * R);
+  const cy = Math.floor(y * R);
+  if (cx < 0 || cy < 0 || cx >= GW || cy >= GH) return false;
+  return !grid[key(cx, cy)];
+}
+
 export function findPath(from: Pt, to: Pt): Pt[] {
   if (!grid) grid = buildGrid();
   const g = grid;

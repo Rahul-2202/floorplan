@@ -1,8 +1,8 @@
 "use client";
 
-import { AnimatePresence, animate, motion, useMotionValue, useMotionValueEvent } from "motion/react";
-import { Fragment, useEffect, useLayoutEffect, useMemo, useRef, useState } from "react";
-import { Avatar } from "./Avatar";
+import { AnimatePresence, animate, motion, useMotionValue, useMotionValueEvent, useSpring, type MotionValue } from "motion/react";
+import { Fragment, useEffect, useLayoutEffect, useMemo, useRef, useState, type ReactNode } from "react";
+import { Avatar, type AgentHandlers } from "./Avatar";
 import { FurnitureArt, HAS_BACK } from "./Furniture";
 import { CAST, FURNITURE, ROOMS, SIZE, TILE, WALL_ITEMS, WORLD, spot, type RoomDef } from "./layout";
 import type { Camera, PropScene, RoomId, RoomState, Scene } from "./types";
@@ -287,7 +287,38 @@ export interface Inset {
   bottom?: number;
 }
 
-export function Office({ scene, className, rounded = true, inset }: { scene: Scene; className?: string; rounded?: boolean; inset?: Inset }) {
+export interface Follow {
+  /** World pixel position the camera keeps centred. */
+  x: MotionValue<number>;
+  y: MotionValue<number>;
+  /** Screen pixels per world pixel. */
+  zoom: number;
+  /** Extra camera offset in world pixels (drag to look around). */
+  panX?: MotionValue<number>;
+  panY?: MotionValue<number>;
+}
+
+export function Office({
+  scene,
+  className,
+  rounded = true,
+  inset,
+  follow,
+  onFloorClick,
+  agentHandlers,
+  children,
+}: {
+  scene: Scene;
+  className?: string;
+  rounded?: boolean;
+  inset?: Inset;
+  /** Interactive mode: the camera follows a point instead of the scene camera. */
+  follow?: Follow;
+  onFloorClick?: (x: number, y: number) => void;
+  agentHandlers?: (id: string) => AgentHandlers | undefined;
+  /** Extra layers rendered inside the world (player, popovers…). */
+  children?: ReactNode;
+}) {
   const box = useRef<HTMLDivElement>(null);
   const world = useRef<HTMLDivElement>(null);
   const [size, setSize] = useState<{ w: number; h: number } | null>(null);
@@ -325,7 +356,7 @@ export function Office({ scene, className, rounded = true, inset }: { scene: Sce
   const ib = inset?.bottom ?? 0;
 
   useEffect(() => {
-    if (!size || !size.w || !near) return;
+    if (!size || !size.w || !near || follow) return;
     const vw = Math.max(1, size.w - il - ir);
     const vh = Math.max(1, size.h - it - ib);
     const fit = cam.cover ? Math.max : Math.min;
@@ -358,6 +389,68 @@ export function Office({ scene, className, rounded = true, inset }: { scene: Sce
 
   useMotionValueEvent(s, "change", (v) => world.current?.style.setProperty("--inv", String(1 / v)));
 
+  // Follow mode: keep a point centred, clamped to the world, with a soft spring.
+  const dummy = useMotionValue(0);
+  const fx = follow?.x ?? dummy;
+  const fy = follow?.y ?? dummy;
+  const px = follow?.panX ?? dummy;
+  const py = follow?.panY ?? dummy;
+  const followX = useMotionValue(0);
+  const followY = useMotionValue(0);
+  const springX = useSpring(followX, { stiffness: 140, damping: 26, mass: 0.9 });
+  const springY = useSpring(followY, { stiffness: 140, damping: 26, mass: 0.9 });
+  const zoom = follow?.zoom ?? 0;
+  const recenter = useRef<(snap?: boolean) => void>(() => {});
+  useLayoutEffect(() => {
+    recenter.current = (snap = false) => {
+    if (!follow || !size) return;
+    const S = zoom;
+    const clampAxis = (c: number, view: number, worldPx: number) => {
+      const scaled = worldPx * S;
+      if (scaled <= view) return (view - scaled) / 2;
+      return Math.min(0, Math.max(view - scaled, view / 2 - c * S));
+    };
+    const X = clampAxis(fx.get() + px.get(), size.w, WORLD.w * TILE);
+    const Y = clampAxis(fy.get() + py.get(), size.h, WORLD.h * TILE);
+    followX.set(X);
+    followY.set(Y);
+    if (snap) {
+      springX.jump(X);
+      springY.jump(Y);
+    }
+    };
+  });
+  useMotionValueEvent(fx, "change", () => recenter.current());
+  useMotionValueEvent(fy, "change", () => recenter.current());
+  useMotionValueEvent(px, "change", () => recenter.current());
+  useMotionValueEvent(py, "change", () => recenter.current());
+  const followed = useRef(false);
+  useLayoutEffect(() => {
+    if (near) world.current?.style.setProperty("--inv", String(1 / s.get()));
+  }, [near, s]);
+
+  useEffect(() => {
+    if (!follow || !size || !near) return;
+    const first = !followed.current;
+    followed.current = true;
+    if (first) {
+      s.set(zoom);
+      world.current?.style.setProperty("--inv", String(1 / zoom));
+    } else {
+      const a = animate(s, zoom, { duration: 0.5, ease: [0.22, 1, 0.36, 1] });
+      recenter.current();
+      return () => a.stop();
+    }
+    recenter.current(first);
+    // eslint-disable-next-line react-hooks/exhaustive-deps
+  }, [zoom, size?.w, size?.h, !!follow, near]);
+
+  const onClickWorld = (e: React.MouseEvent<HTMLDivElement>) => {
+    if (!onFloorClick || !world.current) return;
+    const r = world.current.getBoundingClientRect();
+    onFloorClick(((e.clientX - r.left) / r.width) * WORLD.w, ((e.clientY - r.top) / r.height) * WORLD.h);
+  };
+
   const roomState = (id: RoomId): RoomState => scene.rooms[id] ?? "hidden";
   const agents = Object.entries(scene.agents).filter(([, a]) => a);
   const counts: Partial<Record<RoomId, number>> = {};
@@ -374,7 +467,17 @@ export function Office({ scene, className, rounded = true, inset }: { scene: Sce
       <motion.div
         ref={world}
         className="px-world absolute left-0 top-0"
-        style={{ width: WORLD.w * TILE, height: WORLD.h * TILE, x: tx, y: ty, scale: s, transformOrigin: "0 0", opacity: size ? 1 : 0 }}
+        style={{
+          width: WORLD.w * TILE,
+          height: WORLD.h * TILE,
+          x: follow ? springX : tx,
+          y: follow ? springY : ty,
+          scale: s,
+          transformOrigin: "0 0",
+          opacity: size ? 1 : 0,
+          cursor: onFloorClick ? "pointer" : undefined,
+        }}
+        onClick={onClickWorld}
       >
         {/* hallway floor */}
         <svg className="absolute inset-0" width={WORLD.w * TILE} height={WORLD.h * TILE}>
@@ -421,13 +524,15 @@ export function Office({ scene, className, rounded = true, inset }: { scene: Sce
           {agents.map(([id, a]) => {
             const m = CAST[id];
             if (!m || !a) return null;
-            return <Avatar key={id} member={m} scene={a} labels={scene.labels ?? true} />;
+            return <Avatar key={id} member={m} scene={a} labels={scene.labels ?? true} handlers={agentHandlers?.(id)} />;
           })}
         </AnimatePresence>
 
         <AnimatePresence>
           {Object.entries(scene.props ?? {}).map(([id, p]) => (p ? <Prop key={id} p={p} /> : null))}
         </AnimatePresence>
+
+        {children}
 
         {/* room labels float above everything */}
         <div className="absolute inset-0" style={{ zIndex: 1000, pointerEvents: "none" }}>

@@ -98,6 +98,13 @@ function speak(line: Line, onEnd: () => void) {
   };
 }
 
+/** Speak one line aloud in a speaker's voice (used for Ada's replies). */
+export function say(text: string, who: Speaker = "ada") {
+  if (!speechSupported()) return;
+  window.speechSynthesis.cancel();
+  speak({ who, text }, () => {});
+}
+
 /* ------------------------------------------------------------------- hook */
 
 /**

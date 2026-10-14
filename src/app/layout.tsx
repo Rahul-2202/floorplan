@@ -1,6 +1,5 @@
 import type { Metadata } from "next";
 import { Figtree, Newsreader } from "next/font/google";
-import SmoothScroll from "@/components/SmoothScroll";
 import "./globals.css";
 
 const figtree = Figtree({
@@ -22,7 +21,7 @@ export const metadata: Metadata = {
     "FloorPlan is an AI office you build in a conversation. Set up rooms of AI agents that do real work, talk to each other and remember everything, while you stay CEO.",
 };
 
-export default function RootLayout({ children }: LayoutProps<"/">) {
+export default function RootLayout({ children }: { children: React.ReactNode }) {
   return (
     <html lang="en" className={`${figtree.variable} ${newsreader.variable}`}>
       <head>
@@ -33,7 +32,7 @@ export default function RootLayout({ children }: LayoutProps<"/">) {
         />
       </head>
       <body>
-        <SmoothScroll>{children}</SmoothScroll>
+        {children}
       </body>
     </html>
   );

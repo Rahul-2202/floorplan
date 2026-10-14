@@ -105,14 +105,24 @@ function BubbleView({ bubble }: { bubble: Bubble }) {
   );
 }
 
+export interface AgentHandlers {
+  onClick?: () => void;
+  onEnter?: () => void;
+  onLeave?: () => void;
+  /** Draw a soft ring under the agent (hovered or nearby). */
+  highlight?: boolean;
+}
+
 export function Avatar({
   member,
   scene,
   labels,
+  handlers,
 }: {
   member: CastMember;
   scene: AgentScene;
   labels: boolean;
+  handlers?: AgentHandlers;
 }) {
   const target = spot(scene.at);
   const start = scene.from ? spot(scene.from) : target;
@@ -188,7 +198,24 @@ export function Avatar({
       transition={{ duration: 0.5, delay: scene.delay ?? 0 }}
     >
       <div className={walking ? "walking" : "idle"} style={{ position: "absolute", left: -s.w / 2, top: -s.h, width: s.w, height: s.h }}>
+        {handlers?.highlight && (
+          <div
+            className="absolute left-1/2 -translate-x-1/2 rounded-[50%]"
+            style={{ width: 20, height: 7, bottom: -3.5, background: "rgba(232,116,59,0.35)", boxShadow: "0 0 0 1px rgba(232,116,59,0.8)" }}
+          />
+        )}
         <div className="absolute left-1/2 -translate-x-1/2 rounded-[50%] bg-black/15" style={{ width: 12, height: 3, bottom: -1 }} />
+        {handlers && (
+          <div
+            className="absolute -inset-x-1 -bottom-1 -top-1 z-10 cursor-pointer"
+            onPointerEnter={handlers.onEnter}
+            onPointerLeave={handlers.onLeave}
+            onClick={(e) => {
+              e.stopPropagation();
+              handlers.onClick?.();
+            }}
+          />
+        )}
         <div className="body-bob absolute inset-0">
           {walking ? (
             <>
