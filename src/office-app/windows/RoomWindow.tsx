@@ -4,7 +4,8 @@ import { useState } from "react";
 import { BrandChip } from "@/components/brands";
 import { RuntimeBadge } from "@/components/ui";
 import { NORMS } from "@/sim/data/rooms";
-import { useSim } from "@/sim/store";
+import { can, isCeo } from "@/sim/people";
+import { clockLabel, dmKey, useSim } from "@/sim/store";
 import type { Pending, RoomConfig, RoomKey, TaskState, WhenBlocked } from "@/sim/types";
 import { Bar, Btn, Dot, Face, Section, Segmented, Window } from "../bits";
 import { useUI } from "../ui";
@@ -47,6 +48,9 @@ export function RoomWindow({ id, tab: initial }: { id: RoomKey; tab?: string }) 
   const lockMerge = s.locked.find((l) => l.id === "lock-merge")?.locked;
   const convo = s.conversations.find((c) => c.id === (id === "dev" ? "c-dev" : "c-mkt"));
   const tasks = s.tasks.filter((t) => t.room === id);
+  const editable = can(s, "editRoom", id);
+  const people = Object.values(s.people).filter((p) => p.room === id).sort((a, b) => (a.role === "lead" ? -1 : b.role === "lead" ? 1 : 0));
+  const lockedNote = s.people[s.me]?.room !== id ? `View only. You're not in ${base.name}.` : "View only. In this office only the lead changes rooms.";
 
   const save = () =>
     setPending({ id: `room-${id}-${s.clock}`, summary: `${base.name}: ${changes[0]}${changes.length > 1 ? ` +${changes.length - 1}` : ""}`, items: changes, apply: { rooms: { [id]: r } } });
@@ -55,7 +59,7 @@ export function RoomWindow({ id, tab: initial }: { id: RoomKey; tab?: string }) 
     const text = msg.trim();
     if (!text || !convo) return;
     setMsg("");
-    d({ type: "convo", id: convo.id, msg: { who: "you", t: "now", text } });
+    d({ type: "convo", id: convo.id, msg: { who: s.me, t: clockLabel(s.clock, false), text } });
     setTimeout(() => d({ type: "convo", id: convo.id, msg: { who: base.head, t: "now", text: "Thanks, noted. I'll fold it into today's plan and update the team." } }), 1800);
   };
 
@@ -69,7 +73,9 @@ export function RoomWindow({ id, tab: initial }: { id: RoomKey; tab?: string }) 
       footer={
         tab === "spec" || tab === "rules" ? (
           <div className="flex items-center justify-between gap-2 border-t border-black/[0.06] px-4 py-3">
-            <span className="text-[12px] text-muted">{changes.length ? `${changes.length} unsaved change${changes.length > 1 ? "s" : ""}` : "Edit anything here, no need to ask Ada"}</span>
+            <span className="text-[12px] text-muted">
+              {!editable ? lockedNote : changes.length ? `${changes.length} unsaved change${changes.length > 1 ? "s" : ""}` : isCeo(s) ? "Edit anything here, no need to ask Ada" : base.lead && base.lead !== s.me ? `Anyone in the room can edit. ${nameOf(base.lead)} is told.` : "Edit anything here. Every change is versioned."}
+            </span>
             <div className="flex gap-2">
               <Btn onClick={() => setR(base)} disabled={!changes.length}>
                 Reset
@@ -102,6 +108,7 @@ export function RoomWindow({ id, tab: initial }: { id: RoomKey; tab?: string }) 
       </div>
       <div className="relative">
         <div className="max-h-[min(540px,60vh)] overflow-y-auto p-4">
+          <fieldset disabled={!editable} className="contents">
           {tab === "spec" && (
             <div className="flex flex-col gap-5">
               <Section title="Responsibilities">
@@ -232,6 +239,7 @@ export function RoomWindow({ id, tab: initial }: { id: RoomKey; tab?: string }) 
             </div>
           )}
 
+          </fieldset>
           {tab === "board" && (
             <div className="grid grid-cols-4 gap-2.5">
               {COLS.map((c) => {
@@ -287,6 +295,42 @@ export function RoomWindow({ id, tab: initial }: { id: RoomKey; tab?: string }) 
 
           {tab === "members" && (
             <div className="flex flex-col gap-2">
+              {people.map((p) => (
+                <div key={p.id} className="flex items-center gap-3 rounded-[14px] bg-[#eef2fc] p-3 ring-1 ring-[#d5def5]">
+                  <Face id={p.id} size={36} />
+                  <div className="min-w-0 flex-1">
+                    <div className="flex items-center gap-1.5 text-[13.5px] font-semibold text-ink">
+                      {p.id === s.me ? `${p.full} (you)` : p.full}
+                      <span className="rounded bg-[#2b4fb8] px-1 text-[9px] font-bold uppercase text-white">{p.role === "lead" ? "Lead" : "Person"}</span>
+                    </div>
+                    <div className="truncate text-[12px] text-[#21409a]">
+                      {p.title}
+                      {p.role === "lead" && ` · the ${nameOf(base.head)} reports to ${p.name}`}
+                    </div>
+                  </div>
+                  {p.id !== s.me && (
+                    <>
+                      <Btn
+                        onClick={() => {
+                          ui.closeWin();
+                          ui.openChat(dmKey(s.me, p.id));
+                        }}
+                      >
+                        Message
+                      </Btn>
+                      <Btn
+                        tone="dark"
+                        onClick={() => {
+                          ui.closeWin();
+                          ui.summon(p.id);
+                        }}
+                      >
+                        Ask over
+                      </Btn>
+                    </>
+                  )}
+                </div>
+              ))}
               {[base.head, ...base.members].map((m) => (
                 <div key={m} className="flex items-center gap-3 rounded-[14px] bg-white p-3 ring-1 ring-black/[0.06]">
                   <Face id={m} size={36} />
@@ -314,7 +358,14 @@ export function RoomWindow({ id, tab: initial }: { id: RoomKey; tab?: string }) 
             </div>
           )}
         </div>
-        <ReadBack pending={pending} onClose={() => setPending(null)} />
+        <ReadBack
+          pending={pending}
+          onClose={() => setPending(null)}
+          onApplied={() => {
+            if (base.lead && base.lead !== s.me && pending)
+              d({ type: "addInbox", item: { id: `i-roomedit-${s.clock}-${s.me}`, kind: "fyi", from: s.me, title: `${s.people[s.me]?.name ?? "Someone"} changed ${base.name}`, sub: pending.items.slice(0, 2).join(" · "), priority: "low", at: clockLabel(s.clock, false), to: [base.lead] } });
+          }}
+        />
       </div>
     </Window>
   );

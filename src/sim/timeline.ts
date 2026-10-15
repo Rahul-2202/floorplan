@@ -1,5 +1,5 @@
 import type { SimState } from "./store";
-import type { AgentLive, InboxItem, Output, Task, Toast } from "./types";
+import type { AgentLive, InboxItem, Output, PMsg, Task, Toast } from "./types";
 
 type Step = { at: number; run: (s: SimState) => SimState };
 
@@ -21,7 +21,7 @@ const post = (s: SimState, convo: string, who: string, text: string): SimState =
   conversations: s.conversations.map((c) => (c.id === convo ? { ...c, at: `Thu ${time(s)}`, messages: [...c.messages, { who, text, t: time(s) }] } : c)),
 });
 
-export const TIMELINE: Step[] = [
+const BASE: Step[] = [
   {
     at: 1,
     run: (s) => live(task(s, "t-155", { progress: 55, step: "Running suite 4/5" }), "qa", { step: "Running regression suite 4/5", bubble: "Suite 3 green ✓" }),
@@ -195,3 +195,61 @@ export const TIMELINE: Step[] = [
   },
   { at: 41, run: (s) => live(live(s, "strat", { at: "seat:strat", bubble: null }), "editor", { bubble: null }) },
 ];
+
+/* ------------------------------------------------------------------ people */
+
+const chat = (s: SimState, channel: string, who: string, text: string, agent?: boolean): SimState => {
+  const msg: PMsg = { id: `tl-${channel}-${s.clock}-${who}`, who, t: time(s), text, agent };
+  return { ...s, channels: { ...s.channels, [channel]: [...(s.channels[channel] ?? []), msg] } };
+};
+
+const PEOPLE_STEPS: Step[] = [
+  { at: 2, run: (s) => chat(s, "general", "sam", "Backend's PR #53 is close. Anyone free to sanity-check the confirmation email copy later?") },
+  { at: 3, run: (s) => chat(s, "general", "lena", "Me! After focus time 🙂") },
+  { at: 5, run: (s) => post(s, "c-dev", "priya", "@PM can you confirm we're at 6 of 8 on the release checklist?") },
+  { at: 6, run: (s) => post(s, "c-dev", "pm", "Confirmed, Priya: 6 of 8. DNS and the final regression run are left.") },
+  {
+    at: 7,
+    run: (s) => {
+      if (s.requests.some((r) => r.id === "req-design")) return s;
+      let n: SimState = {
+        ...s,
+        requests: [{ id: "req-design", role: "Designer", room: "marketing", by: "lena", why: "Carousel and ad visuals for launch week. The creators are at capacity.", at: time(s), ada: "pending", ceo: "pending" }, ...s.requests],
+      };
+      n = inbox(n, { id: "i-lena-req", kind: "fyi", from: "lena", title: "Lena asked for a Designer agent", sub: "You're copied as the room lead. Ada is reviewing it, then the CEO decides.", priority: "low", at: time(n), ref: { type: "request", id: "req-design" }, to: ["marco"] });
+      n = live(n, "lena", { bubble: "Asked Ada for a designer agent" });
+      return toast(n, { who: "lena", text: "Lena asked Ada and the CEO for a Designer agent in Marketing", action: { label: "Requests", panel: "people", ref: "requests" } });
+    },
+  },
+  {
+    at: 9,
+    run: (s) => {
+      const r = s.requests.find((x) => x.id === "req-design");
+      let n = live(s, "lena", { bubble: null });
+      if (!r || r.ada !== "pending") return n;
+      n = { ...n, requests: n.requests.map((x) => (x.id === "req-design" ? { ...x, ada: "approved", adaNote: "Marketing has $49 left this week. I'd start at $25 a week, drafts only, no publishing." } : x)) };
+      n = inbox(n, { id: "i-req-design", kind: "approval", from: "lena", title: "Add a Designer agent to Marketing", sub: "Requested by Lena · Ada approved · $25 a week, drafts only", priority: "normal", at: time(n), ref: { type: "request", id: "req-design" }, to: ["you"] });
+      return toast(n, { who: "ada", text: "I approved Lena's Designer request. It needs your yes.", action: { label: "Decide", panel: "inbox" } });
+    },
+  },
+  {
+    at: 12,
+    run: (s) => {
+      if (s.people.jordan?.room || s.me === "jordan") return s;
+      return live(chat(s, "general", "jordan", "Still in the lobby. Happy to help anyone meanwhile!"), "jordan", { bubble: "Anyone need a hand?" });
+    },
+  },
+  { at: 14, run: (s) => live(s, "jordan", { bubble: null }) },
+  { at: 15, run: (s) => chat(s, "general", "marco", "@Strategist can the clinic email move to Monday?") },
+  { at: 16, run: (s) => chat(s, "general", "strat", "Yes, Marco. Monday 9:00 works. I've updated the campaign plan.", true) },
+  {
+    at: 20,
+    run: (s) => {
+      const open = s.inbox.find((i) => i.id === "i-priya-dns" && !i.resolved);
+      return open && s.me !== "priya" ? chat(s, "dm:priya|you", "priya", "Ping on DNS 🙏 Launch is tomorrow, and it's the last real blocker.") : s;
+    },
+  },
+  { at: 25, run: (s) => chat(s, "general", "sam", "Timezone fix is in and the re-run is green 🎉 Nice work, Backend and Tester.") },
+];
+
+export const TIMELINE: Step[] = [...BASE, ...PEOPLE_STEPS].sort((a, b) => a.at - b.at);

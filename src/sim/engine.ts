@@ -15,6 +15,8 @@ const AMBIENT: Record<string, string[]> = {
   cr1: ["mkt:beside-ed"],
   cr2: ["mkt:brief", "hall:cooler"],
   editor: ["mkt:brief"],
+  sam: ["hall:cooler", "dev:board"],
+  marco: ["mkt:brief", "mkt:beside-st"],
 };
 
 /** Advances the sim clock and lets agents stretch their legs now and then. */
@@ -41,7 +43,7 @@ export function useEngine(busy: string[]) {
       const st = ref.current;
       const ids = Object.keys(AMBIENT).filter((id) => {
         const l = st.live[id];
-        return l && !l.paused && !l.bubble && l.status !== "blocked" && typeof l.at === "string" && l.at.startsWith("seat:") && !busyRef.current.includes(id);
+        return l && !l.paused && !l.bubble && l.status !== "blocked" && l.status !== "meeting" && typeof l.at === "string" && l.at.startsWith("seat:") && !busyRef.current.includes(id);
       });
       if (!ids.length) return;
       const id = ids[Math.floor(Math.random() * ids.length)];

@@ -26,8 +26,8 @@ export function HoverTag({ id, far, onCall, onOpen }: { id: string; far: boolean
       </div>
       <div className="flex flex-col gap-1">
         {far && (
-          <Btn tone="dark" onClick={onCall} className="!px-2.5 !py-1 !text-[11.5px]">
-            Call to me
+          <Btn tone="dark" onClick={onCall} className={`!px-2.5 !py-1 !text-[11.5px] ${s.people[id] ? "!bg-[#2b4fb8]" : ""}`}>
+            {s.people[id] ? "Ask over" : "Call to me"}
           </Btn>
         )}
         <Btn onClick={onOpen} className="!px-2.5 !py-1 !text-[11.5px]">

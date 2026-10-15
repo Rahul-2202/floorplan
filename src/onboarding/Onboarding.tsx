@@ -7,7 +7,7 @@ import { BrandIcon } from "@/components/brands";
 import { LogoMark } from "@/components/Logo";
 import { RuntimeBadge } from "@/components/ui";
 import { say } from "@/lib/meeting";
-import { CAST } from "@/office/layout";
+import { CAST, setAppLayout } from "@/office/layout";
 import { Office } from "@/office/Office";
 import type { AgentScene, RoomId, RoomState, Scene } from "@/office/types";
 import { Face } from "@/office-app/bits";
@@ -105,11 +105,18 @@ function scene(opts: {
   locked?: RoomId[];
   notes?: Scene["roomNotes"];
   status?: AgentScene["status"];
+  people?: string[];
+  peopleWalking?: boolean;
+  nina?: string;
 }): Scene {
   const agents: Record<string, AgentScene> = {
     you: { at: "seat:you" },
     ada: { at: "ada:home", bubble: opts.ada ? { text: opts.ada, tone: "ada" } : null },
   };
+  (opts.people ?? []).forEach((id, i) => {
+    agents[id] = { at: id === "jordan" ? "lobby:1" : `seat:${id}`, ...(opts.peopleWalking ? { from: "hall:entry", delay: 0.3 + i * 0.5, speed: 1.3 } : {}) };
+  });
+  if (opts.nina) agents.nina = { at: opts.nina, from: "hall:entry", speed: 1.2, delay: 0.4 };
   (opts.hired ?? []).forEach((id, i) => {
     agents[id] = { at: `seat:${id}`, status: opts.status ?? "idle", ...(opts.walking?.includes(id) ? { from: "ceo:outside", delay: i * 0.45, speed: 1.4 } : {}) };
   });
@@ -118,9 +125,18 @@ function scene(opts: {
 
 /* ------------------------------------------------------------------- steps */
 
-type StepId = "welcome" | "company" | "goal" | "rooms" | "dev" | "marketing" | "tools" | "rules" | "calendar" | "review" | "memory";
-const ORDER: StepId[] = ["welcome", "company", "goal", "rooms", "dev", "marketing", "tools", "rules", "calendar", "review", "memory"];
+type StepId = "welcome" | "company" | "goal" | "rooms" | "dev" | "marketing" | "team" | "tools" | "rules" | "calendar" | "review" | "memory" | "join-code" | "join-profile" | "join-room";
+const CREATE: StepId[] = ["welcome", "company", "goal", "rooms", "dev", "marketing", "team", "tools", "rules", "calendar", "review", "memory"];
+const JOIN: StepId[] = ["welcome", "join-code", "join-profile", "join-room"];
+const PEOPLE = ["priya", "sam", "marco", "lena"];
+
+export type StartAs = { as: "ceo" } | { as: "nina"; via: "office" | "room" };
+
 const TITLES: Record<StepId, string> = {
+  team: "Your people",
+  "join-code": "Your invite",
+  "join-profile": "About you",
+  "join-room": "Your room",
   welcome: "Meet Ada",
   company: "Your company",
   goal: "First goal",
@@ -135,7 +151,11 @@ const TITLES: Record<StepId, string> = {
 };
 
 const ADA: Record<StepId, string> = {
-  welcome: "Hi, I'm Ada, your office manager. I'll set up your company with you in a few minutes, then run it day to day. How would you like to talk?",
+  welcome: "Hi, I'm Ada, the office manager. Are you setting up a new office, or joining one you've been invited to?",
+  team: "Now your people. Each room can have a human lead: the agent head reports to them, and they report to you.",
+  "join-code": "Welcome to Bookwell! Which invite did you get?",
+  "join-profile": "This is how the team will see you.",
+  "join-room": "Here's how it works for you once you're in.",
   company: "Let's start with the basics. What's the company, and what does it do?",
   goal: "What should the company achieve first? And what must never happen?",
   rooms: "For that goal I'd start with two rooms. You can add any other team later, in a sentence.",
@@ -166,6 +186,9 @@ const TOOLS: { n: string; ok: boolean; why?: string }[] = [
 const READBACK = [
   "Create Development: a PM to lead, frontend, backend, DevOps and a tester",
   "Create Marketing: a strategist to lead, two creators and an editor",
+  "Invite Priya to lead Development (the PM reports to her) with Sam",
+  "Invite Marco to lead Marketing (the Strategist reports to him) with Lena",
+  "New agents: anyone can ask, Ada reviews, you approve",
   "Connect GitHub, Linear, Slack, Notion, Google Docs, LinkedIn, Figma, Vercel and Sentry",
   "Lock: nobody posts publicly without your approval",
   "Lock: nothing merges to main without your approval",
@@ -184,10 +207,20 @@ const MEMORY = [
   ["CLAUDE.md / AGENTS.md", "Generated for every runtime"],
 ];
 
-export function Onboarding({ onDone }: { onDone: () => void }) {
+export function Onboarding({ onDone }: { onDone: (as: StartAs) => void }) {
   const [i, setI] = useState(0);
+  const [mode, setMode] = useState<"create" | "join">("create");
+  const ORDER = mode === "create" ? CREATE : JOIN;
   const step = ORDER[i];
   const [voice, setVoice] = useState(false);
+  const [invited, setInvited] = useState(false);
+  const [via, setVia] = useState<"office" | "room" | null>(null);
+
+  // People get desks in the office app; show them while it's being built.
+  useEffect(() => {
+    setAppLayout(true);
+    return () => setAppLayout(false);
+  }, []);
   const [company, setCompany] = useState<string | null>(null);
   const [size, setSize] = useState<string | null>(null);
   const [goal, setGoal] = useState<string | null>(null);
@@ -223,6 +256,10 @@ export function Onboarding({ onDone }: { onDone: () => void }) {
     rooms: true,
     dev: hiredDev,
     marketing: hiredMkt,
+    team: invited,
+    "join-code": !!via,
+    "join-profile": true,
+    "join-room": true,
     tools: required.every((t) => connected.includes(t)),
     rules: true,
     calendar: true,
@@ -243,16 +280,23 @@ export function Onboarding({ onDone }: { onDone: () => void }) {
         return scene({ rooms: { dev: hiredDev ? "built" : "ghost", marketing: "ghost" }, hired: hiredDev ? DEV : [], walking: DEV, camera: { x: 4, y: 0, w: 33, h: 16 } });
       case "marketing":
         return scene({ rooms: { dev: "built", marketing: hiredMkt ? "built" : "ghost" }, hired: hiredMkt ? [...DEV, ...MKT] : DEV, walking: MKT, camera: { x: 13, y: 0, w: 37, h: 16 } });
+      case "team":
+        return scene({ rooms: { dev: "built", marketing: "built" }, hired: [...DEV, ...MKT], camera: { x: 0, y: 0, w: 50, h: 16 }, people: invited ? PEOPLE : [], peopleWalking: true, ada: invited ? "Your team is walking in." : "Who's on the team?" });
+      case "join-code":
+      case "join-profile":
+        return scene({ rooms: { dev: "built", marketing: "built", meeting: "built" }, hired: [...DEV, ...MKT], camera: { x: 0, y: 0, w: 50, h: 16 }, people: [...PEOPLE, "jordan"], locked: ["dev", "marketing"], ada: step === "join-code" ? "Welcome!" : "Nice to meet you." });
+      case "join-room":
+        return scene({ rooms: { dev: "built", marketing: "built", meeting: "built" }, hired: [...DEV, ...MKT], camera: via === "room" ? { x: 26, y: 0, w: 24, h: 15 } : { x: 0, y: 4, w: 28, h: 13 }, people: [...PEOPLE, "jordan"], nina: via === "room" ? "mkt:new" : "lobby:2", ada: via === "room" ? "Marco's expecting you." : "The CEO will pick your room." });
       case "tools":
-        return scene({ rooms: { dev: "built", marketing: "built", ...ghostAll }, hired: [...DEV, ...MKT], camera: ["ceo", "dev", "marketing"], ada: connected.length ? `${connected.length} tools connected` : "Connect your tools." });
+        return scene({ rooms: { dev: "built", marketing: "built", ...ghostAll }, hired: [...DEV, ...MKT], people: PEOPLE, camera: ["ceo", "dev", "marketing"], ada: connected.length ? `${connected.length} tools connected` : "Connect your tools." });
       case "rules":
-        return scene({ rooms: { dev: "built", marketing: "built" }, hired: [...DEV, ...MKT], camera: ["ceo", "dev", "marketing"], locked: ["dev", "marketing"], notes: { dev: "When blocked: park and switch", marketing: "When blocked: best guess, flag it" } });
+        return scene({ rooms: { dev: "built", marketing: "built" }, hired: [...DEV, ...MKT], people: PEOPLE, camera: ["ceo", "dev", "marketing"], locked: ["dev", "marketing"], notes: { dev: "When blocked: park and switch", marketing: "When blocked: best guess, flag it" } });
       case "calendar":
-        return scene({ rooms: { dev: "built", marketing: "built", meeting: "built" }, hired: [...DEV, ...MKT], camera: ["ceo", "meeting"], locked: ["dev", "marketing"], ada: "Meeting room's ready." });
+        return scene({ rooms: { dev: "built", marketing: "built", meeting: "built" }, hired: [...DEV, ...MKT], people: PEOPLE, camera: ["ceo", "meeting"], locked: ["dev", "marketing"], ada: "Meeting room's ready." });
       default:
-        return scene({ rooms: { dev: "built", marketing: "built", meeting: "built", sales: "ghost", legal: "ghost", finance: "ghost" }, hired: [...DEV, ...MKT], status: step === "memory" ? "working" : "idle", locked: ["dev", "marketing"], ada: step === "memory" ? "Your office is open." : "Here's the read-back." });
+        return scene({ rooms: { dev: "built", marketing: "built", meeting: "built", sales: "ghost", legal: "ghost", finance: "ghost" }, hired: [...DEV, ...MKT], people: PEOPLE, status: step === "memory" ? "working" : "idle", locked: ["dev", "marketing"], ada: step === "memory" ? "Your office is open." : "Here's the read-back." });
     }
-  }, [step, hiredDev, hiredMkt, connected.length]);
+  }, [step, hiredDev, hiredMkt, connected.length, invited, via]);
 
   const connect = (n: string) => {
     setConnecting(n);
@@ -265,10 +309,121 @@ export function Onboarding({ onDone }: { onDone: () => void }) {
 
   const body: Record<StepId, ReactNode> = {
     welcome: (
+      <div className="flex flex-col gap-4">
+        <div className="flex flex-col gap-1.5">
+          <Choice label="Set up a new office" sub="You're the CEO. Ada builds the company with you." selected={mode === "create"} allowed onPick={() => setMode("create")} />
+          <Choice label="Join with an invite" sub="Someone invited you with a code or a room link" selected={mode === "join"} allowed onPick={() => setMode("join")} badge="New" />
+        </div>
+        <div>
+          <div className="mb-1.5 text-[12px] font-semibold text-muted">How would you like to talk to Ada?</div>
+          <div className="grid grid-cols-2 gap-1.5">
+            <Choice label="Chat" sub="Type" selected={!voice} allowed onPick={() => setVoice(false)} />
+            <Choice label="Voice" sub="Ada speaks" selected={voice} allowed onPick={() => setVoice(true)} />
+          </div>
+        </div>
+        <div className="text-[12px] text-muted">This is a guided demo: you&apos;ll see every option, but only the ones that build the demo office can be picked.</div>
+      </div>
+    ),
+    team: (
+      <div className="flex flex-col gap-3">
+        <div className="overflow-hidden rounded-[16px] bg-white ring-1 ring-black/[0.08]">
+          {[
+            ["priya", "Priya Raman", "priya@bookwell.app", "Development", "Lead"],
+            ["sam", "Sam Okafor", "sam@bookwell.app", "Development", "Member"],
+            ["marco", "Marco Bianchi", "marco@bookwell.app", "Marketing", "Lead"],
+            ["lena", "Lena Park", "lena@bookwell.app", "Marketing", "Member"],
+          ].map(([id, n, e, r, role], k) => (
+            <motion.div key={id} initial={{ opacity: 0, x: -6 }} animate={{ opacity: 1, x: 0 }} transition={{ delay: k * 0.06 }} className="flex items-center gap-2.5 border-b border-black/[0.05] px-3 py-2.5 last:border-0">
+              <Face id={id} size={30} />
+              <div className="min-w-0 flex-1">
+                <div className="text-[13px] font-semibold text-ink">{n}</div>
+                <div className="truncate text-[11.5px] text-muted">{e}</div>
+              </div>
+              <span className="text-[11.5px] font-semibold text-ink-2">{r}</span>
+              <span className={`rounded-full px-2 py-0.5 text-[10.5px] font-bold ${role === "Lead" ? "bg-[#2b4fb8] text-white" : "bg-[#eef2fc] text-[#21409a]"}`}>{role}</span>
+              {invited && <span className="text-[12px] text-ok">✓</span>}
+            </motion.div>
+          ))}
+        </div>
+        <div className="rounded-[16px] bg-white p-3.5 ring-1 ring-black/[0.08]">
+          <div className="mb-2 text-[11px] font-bold uppercase tracking-wide text-faint">Hierarchy</div>
+          <div className="flex items-center justify-between py-1">
+            <span className="text-[13px] font-semibold text-ink">Agent heads report to</span>
+            <Seg value="lead" options={[{ v: "lead", l: "Room lead" }, { v: "ceo", l: "You" }]} />
+          </div>
+          <div className="flex items-center justify-between py-1">
+            <span className="text-[13px] font-semibold text-ink">Who can change a room</span>
+            <Seg value="room" options={[{ v: "room", l: "Everyone in it" }, { v: "lead", l: "Lead only" }]} />
+          </div>
+          <div className="flex items-center justify-between py-1">
+            <span className="text-[13px] font-semibold text-ink">Adding agents</span>
+            <span className="flex items-center gap-1 rounded-full bg-ink px-2.5 py-1 text-[11px] font-semibold text-white">
+              <Lock /> Ada + you approve
+            </span>
+          </div>
+        </div>
+        <div className="flex items-center gap-2 rounded-[16px] bg-[#eef2fc] px-3.5 py-3 ring-1 ring-[#d5def5]">
+          <div className="min-w-0 flex-1">
+            <div className="text-[12px] font-semibold text-[#21409a]">Office invite code</div>
+            <div className="font-mono text-[16px] font-semibold tracking-[0.06em] text-ink">BKW-7Q4M</div>
+            <div className="text-[11.5px] text-[#21409a]/75">Anyone else who joins waits in the lobby until you or Ada gives them a room.</div>
+          </div>
+        </div>
+        <button
+          disabled={invited}
+          onClick={() => setInvited(true)}
+          className={`rounded-full py-2.5 text-[13.5px] font-semibold transition-colors ${invited ? "bg-[#eaf6ee] text-[#24603a]" : "bg-[#2b4fb8] text-white hover:bg-[#22409a]"}`}
+        >
+          {invited ? "✓ 4 invites sent. They're walking in." : "Send 4 invites"}
+        </button>
+      </div>
+    ),
+    "join-code": (
       <div className="flex flex-col gap-2">
-        <Choice label="Chat" sub="Type to Ada" selected={!voice} allowed onPick={() => setVoice(false)} />
-        <Choice label="Voice" sub="Ada speaks her lines aloud" selected={voice} allowed onPick={() => setVoice(true)} />
-        <div className="mt-1 text-[12px] text-muted">This is a guided demo: you&apos;ll see every option, but only the ones that build the demo office can be picked.</div>
+        <Choice label="Office code · BKW-7Q4M" sub="From the CEO. You wait in the lobby until you're given a room." selected={via === "office"} allowed onPick={() => setVia("office")} />
+        <Choice label="Room link · floorplan.app/join/mkt-r8w2" sub="From Marco. Takes you straight into Marketing." selected={via === "room"} allowed onPick={() => setVia("room")} />
+        <Choice label="Another company's code" selected={false} allowed={false} onPick={() => {}} />
+        <div className="mt-1 text-[12px] text-muted">Both are real paths in FloorPlan. Try one now, and the other from the start again.</div>
+      </div>
+    ),
+    "join-profile": (
+      <div className="flex flex-col gap-3">
+        <div className="flex items-center gap-3 rounded-[16px] bg-white p-3.5 ring-1 ring-black/[0.08]">
+          <Face id="nina" size={52} />
+          <div>
+            <div className="text-[15px] font-semibold text-ink">Nina Patel</div>
+            <div className="text-[12.5px] text-muted">Brand designer · nina@bookwell.app</div>
+            <div className="mt-1 text-[11.5px] text-[#21409a]">Invited by Marco, Wed 17:20</div>
+          </div>
+        </div>
+        <Locked label="Display name" value="Nina" />
+        <Locked label="Title" value="Brand designer" />
+        <div className="flex flex-col gap-1.5">
+          <Check label="Mic muted when you join a call" sub="Unmute any time. Your words go into the transcript." />
+          <Check label="Camera off until you turn it on" sub="Your avatar shows instead." />
+        </div>
+      </div>
+    ),
+    "join-room": (
+      <div className="flex flex-col gap-3">
+        <div className="rounded-[16px] bg-[#eef2fc] px-3.5 py-3 text-[13px] leading-snug text-[#21409a] ring-1 ring-[#d5def5]">
+          {via === "room" ? (
+            <>
+              You&apos;re joining <b>Marketing</b> as a member. <b>Marco</b> is your lead, and the <b>Strategist</b> (the room&apos;s agent head) reports to him.
+            </>
+          ) : (
+            <>
+              You&apos;ll start in the <b>lobby</b>. I&apos;ve told the CEO you&apos;re here; they or I will give you a room. Jordan&apos;s waiting there too.
+            </>
+          )}
+        </div>
+        <div className="flex flex-col gap-1.5">
+          <Check label="Chat in #general from any room, and DM anyone" sub="Mention an agent, like @Strategist, to pull it in" />
+          <Check label="Voice and video with whoever's in your room" sub="Add agents to the call and they speak up" />
+          <Check label="Change your room's spec and rules" sub="Your lead is told, and every change is versioned" />
+          <Check label="Ask for new agents" sub="Ada reviews the budget, the CEO approves" />
+          <Check label="Assign work to your room's agents" sub="Other rooms' work goes through their lead" />
+        </div>
       </div>
     ),
     company: (
@@ -479,7 +634,7 @@ export function Onboarding({ onDone }: { onDone: () => void }) {
         <Link href="/">
           <LogoMark size={26} />
         </Link>
-        <span className="text-[13px] font-semibold text-ink">Set up your office</span>
+        <span className="text-[13px] font-semibold text-ink">{mode === "join" ? "Join Bookwell" : "Set up your office"}</span>
         <span className="text-[12px] text-muted">· demo</span>
       </div>
       <Link href="/office" className="absolute right-3 top-3 z-20 rounded-full bg-white/95 px-3.5 py-2 text-[12.5px] font-semibold text-ink-2 shadow-[var(--shadow-card)] ring-1 ring-black/[0.06] hover:text-ink">
@@ -528,10 +683,10 @@ export function Onboarding({ onDone }: { onDone: () => void }) {
           </button>
           <button
             disabled={!canNext[step]}
-            onClick={() => (last ? onDone() : setI((v) => v + 1))}
+            onClick={() => (last ? onDone(mode === "join" ? { as: "nina", via: via ?? "office" } : { as: "ceo" }) : setI((v) => v + 1))}
             className="rounded-full bg-ink px-5 py-2.5 text-[13.5px] font-semibold text-white transition-opacity disabled:opacity-35"
           >
-            {last ? "Walk into your office →" : step === "review" ? "Confirm and apply" : "Continue"}
+            {last ? (mode === "join" ? (via === "room" ? "Walk into Marketing →" : "Walk into the lobby →") : "Walk into your office →") : step === "review" ? "Confirm and apply" : "Continue"}
           </button>
         </div>
       </div>

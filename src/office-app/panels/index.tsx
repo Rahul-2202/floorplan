@@ -12,6 +12,7 @@ import { GovernancePanel } from "./Governance";
 import { InboxPanel } from "./Inbox";
 import { MemoryPanel } from "./Memory";
 import { OutputsPanel } from "./Outputs";
+import { PeoplePanel } from "./People";
 import { TeamPanel } from "./Team";
 
 export function PanelRouter() {
@@ -31,6 +32,7 @@ export function PanelRouter() {
     memory: ["Company memory", "Everything the company knows, with sources"],
     inbox: ["Needs your attention", "Triaged by Ada"],
     governance: ["Rules & settings", "Permissions, approvals, budgets, locks and versions"],
+    people: ["People", `${Object.keys(s.people).length} people · invites, hierarchy and agent requests`],
   };
 
   return (
@@ -45,6 +47,7 @@ export function PanelRouter() {
           {p === "memory" && <MemoryPanel initial={ref} />}
           {p === "inbox" && <InboxPanel initial={ref} />}
           {p === "governance" && <GovernancePanel initial={ref} />}
+          {p === "people" && <PeoplePanel initial={ref} />}
         </SidePanel>
       )}
     </AnimatePresence>

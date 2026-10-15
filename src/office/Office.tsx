@@ -4,7 +4,7 @@ import { AnimatePresence, animate, motion, useMotionValue, useMotionValueEvent, 
 import { Fragment, useEffect, useLayoutEffect, useMemo, useRef, useState, type ReactNode } from "react";
 import { Avatar, type AgentHandlers } from "./Avatar";
 import { FurnitureArt, HAS_BACK } from "./Furniture";
-import { CAST, FURNITURE, ROOMS, SIZE, TILE, WALL_ITEMS, WORLD, spot, type RoomDef } from "./layout";
+import { CAST, FURNITURE, ROOMS, SIZE, TILE, WALL_ITEMS, WORLD, inLayout, spot, type RoomDef } from "./layout";
 import type { Camera, PropScene, RoomId, RoomState, Scene } from "./types";
 
 const EASE_CAM = [0.65, 0, 0.35, 1] as const;
@@ -456,10 +456,10 @@ export function Office({
   const counts: Partial<Record<RoomId, number>> = {};
   agents.forEach(([id]) => {
     const m = CAST[id];
-    if (m && m.room !== "ceo") counts[m.room] = (counts[m.room] ?? 0) + 1;
+    if (m && m.room !== "ceo" && !m.human) counts[m.room] = (counts[m.room] ?? 0) + 1;
   });
 
-  const visibleFurniture = FURNITURE.filter((f) => f.room === "hall" || roomState(f.room) !== "hidden");
+  const visibleFurniture = FURNITURE.filter((f) => inLayout(f) && (f.room === "hall" || roomState(f.room) !== "hidden"));
 
   return (
     <div ref={box} className={`relative h-full w-full overflow-hidden ${rounded ? "rounded-[inherit]" : ""} ${className ?? ""}`} style={{ background: "#e9e3d8" }}>

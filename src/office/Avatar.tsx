@@ -261,7 +261,13 @@ export function Avatar({
                 </motion.div>
               )}
             </AnimatePresence>
-            {labels ? (
+            {labels && member.human ? (
+              <div className="flex items-center gap-1 whitespace-nowrap rounded-full bg-[#2b4fb8] py-[1px] pl-1 pr-1.5 text-[10px] font-semibold text-white shadow-[0_1px_4px_rgba(0,0,0,0.18)]">
+                <span className="h-[6px] w-[6px] rounded-full ring-1 ring-white/70" style={{ background: status === "away" ? "#c7c3bc" : status === "meeting" ? "#b9a8ff" : "#5fd08a" }} />
+                {member.name}
+                {member.real && <span className="rounded-full bg-[#ff5a4f] px-1 text-[7.5px] font-bold uppercase tracking-wide">Live</span>}
+              </div>
+            ) : labels ? (
               <div className="flex items-center gap-1 whitespace-nowrap rounded-full bg-white/90 py-[1px] pl-1 pr-1.5 text-[10px] font-semibold text-ink-2 shadow-[0_1px_4px_rgba(0,0,0,0.12)]">
                 <StatusDot status={status} />
                 {member.name}

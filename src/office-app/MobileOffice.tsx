@@ -3,8 +3,11 @@
 import Link from "next/link";
 import { useState } from "react";
 import { LogoMark } from "@/components/Logo";
-import { clockLabel, useSim } from "@/sim/store";
+import { inboxFor, me } from "@/sim/people";
+import { clockLabel, roomName, useSim } from "@/sim/store";
 import { Dot, Face } from "./bits";
+import { ChatDock } from "./ChatDock";
+import { PeoplePanel } from "./panels/People";
 import { ConversationsPanel } from "./panels/Conversations";
 import { DashboardPanel } from "./panels/Dashboard";
 import { InboxPanel } from "./panels/Inbox";
@@ -12,14 +15,15 @@ import { useUI } from "./ui";
 import { WindowRouter } from "./windows";
 import { nameOf } from "./who";
 
-type Tab = "needs" | "rooms" | "work" | "ada";
+type Tab = "needs" | "rooms" | "people" | "work" | "ada";
 
 /** Phones get the list view from the spec: what needs you, rooms and meetings, Ada. */
 export function MobileOffice() {
   const { s } = useSim();
   const ui = useUI();
   const [tab, setTab] = useState<Tab>("needs");
-  const needs = s.inbox.filter((i) => !i.resolved && !i.batched).length;
+  const needs = inboxFor(s).open.filter((i) => !i.batched).length;
+  const p = me(s);
 
   return (
     <div className="fixed inset-0 flex flex-col bg-[#f7f6f3]">
@@ -29,7 +33,10 @@ export function MobileOffice() {
         </Link>
         <div className="flex-1 leading-tight">
           <div className="text-[14px] font-semibold text-ink">Bookwell HQ</div>
-          <div className="text-[11px] text-muted">Live simulation · {clockLabel(s.clock)}</div>
+          <div className="text-[11px] text-muted">
+            {p.id === "you" ? "CEO" : p.name}
+            {p.room ? ` · ${roomName(p.room)}` : p.id === "you" ? "" : " · lobby"} · {clockLabel(s.clock)}
+          </div>
         </div>
         <button onClick={() => ui.openWin({ kind: "assign" })} className="rounded-full bg-ink px-3 py-1.5 text-[12.5px] font-semibold text-white">
           + Task
@@ -39,6 +46,7 @@ export function MobileOffice() {
       <div className="min-h-0 flex-1 overflow-y-auto p-4">
         {tab === "needs" && <InboxPanel />}
         {tab === "work" && <DashboardPanel />}
+        {tab === "people" && <PeoplePanel />}
         {tab === "rooms" && (
           <div className="flex flex-col gap-5">
             {(["dev", "marketing"] as const).map((r) => {
@@ -93,11 +101,15 @@ export function MobileOffice() {
         )}
       </div>
 
-      <div className="grid grid-cols-4 border-t border-black/[0.06] bg-white pb-[env(safe-area-inset-bottom)]">
+      <div className="pointer-events-none absolute inset-x-0 bottom-[52px] top-0 z-40 [&>*]:pointer-events-auto">
+        <ChatDock />
+      </div>
+      <div className="grid grid-cols-5 border-t border-black/[0.06] bg-white pb-[env(safe-area-inset-bottom)]">
         {(
           [
             ["needs", "Needs you", needs],
             ["rooms", "Rooms", 0],
+            ["people", "People", 0],
             ["work", "Work", 0],
             ["ada", "Ada", 0],
           ] as [Tab, string, number][]

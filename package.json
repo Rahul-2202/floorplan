@@ -15,7 +15,8 @@
     "next": "16.4.0",
     "react": "19.3.0",
     "react-dom": "19.3.0",
-    "simple-icons": "^16.35.0"
+    "simple-icons": "^16.35.0",
+    "trystero": "0.25.4"
   },
   "devDependencies": {
     "@tailwindcss/turbopack": "^4",

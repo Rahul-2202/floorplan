@@ -151,7 +151,7 @@ export function LiveMeeting({ id }: { id: string }) {
     const t = setTimeout(() => setPhase("live"), 4500);
     return () => {
       clearTimeout(t);
-      agents.forEach((a) => d({ type: "live", id: a, patch: { at: homeOf(a, sRef.current.hires), status: a === "ada" ? "working" : "working", bubble: null } }));
+      agents.forEach((a) => d({ type: "live", id: a, patch: { at: homeOf(a, sRef.current), status: a === "ada" ? "working" : "working", bubble: null } }));
     };
     // eslint-disable-next-line react-hooks/exhaustive-deps
   }, [id]);

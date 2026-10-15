@@ -4,6 +4,7 @@ import { useEffect, useRef, useState } from "react";
 import { CAST } from "@/office/layout";
 import { PERM_LABEL } from "@/sim/data/agents";
 import { NORMS } from "@/sim/data/rooms";
+import { isCeo } from "@/sim/people";
 import { useSim } from "@/sim/store";
 import type { Pending, PermKey, PermLevel, RoomKey } from "@/sim/types";
 import { Bar, Btn, Face, Section, Toggle } from "../bits";
@@ -47,8 +48,20 @@ export function GovernancePanel({ initial }: { initial?: string }) {
     });
   };
 
+  const editable = isCeo(s);
   return (
     <div ref={root} className="relative flex flex-col gap-6">
+      {!editable && (
+        <div className="-mb-2 flex items-center justify-between gap-3 rounded-[16px] bg-[#eef2fc] px-3.5 py-3 text-[12.5px] text-[#21409a]">
+          <span>View only. Company rules are set by the CEO and Ada. Your room&apos;s own spec and rules are yours to edit.</span>
+          {s.people[s.me]?.room && (s.people[s.me].room === "dev" || s.people[s.me].room === "marketing") && (
+            <button onClick={() => ui.openWin({ kind: "room", id: s.people[s.me].room as "dev" | "marketing", tab: "rules" })} className="shrink-0 rounded-full bg-[#2b4fb8] px-3 py-1 text-[12px] font-semibold text-white">
+              My room&apos;s rules
+            </button>
+          )}
+        </div>
+      )}
+      <fieldset disabled={!editable} className="contents">
       <div data-anchor="permissions">
         <Section title="Permissions · click a cell to change it">
           <div className="overflow-x-auto rounded-[16px] bg-white ring-1 ring-black/[0.06]">
@@ -210,6 +223,7 @@ export function GovernancePanel({ initial }: { initial?: string }) {
           </div>
         </Section>
       </div>
+      </fieldset>
 
       <div className="pointer-events-none fixed inset-0 z-[70] [&>*]:pointer-events-auto">
         <ReadBack pending={pending} onClose={() => setPending(null)} />

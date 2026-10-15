@@ -1,8 +1,13 @@
 "use client";
 
-import { useEffect, useState, type ReactNode } from "react";
+import { useEffect, useRef, useState, type Dispatch, type ReactNode } from "react";
+import { JoinGate } from "@/live/JoinGate";
+import { LiveSync } from "@/live/LiveSync";
+import { ROOMS, setAppLayout } from "@/office/layout";
 import { useEngine } from "@/sim/engine";
-import { SimProvider } from "@/sim/store";
+import { SimProvider, useSim, type Action } from "@/sim/store";
+import { CallDock } from "./CallDock";
+import { ChatDock } from "./ChatDock";
 import { MobileOffice } from "./MobileOffice";
 import { PanelRouter } from "./panels";
 import { Toasts } from "./Toasts";
@@ -25,13 +30,20 @@ function Shell({ overlay }: { overlay?: ReactNode }) {
 
 function MobileShell() {
   useEngine([]);
-  return <MobileOffice />;
+  return (
+    <>
+      <MobileOffice />
+      <LiveSync />
+      <JoinGate />
+    </>
+  );
 }
 
 function DesktopShell({ overlay }: { overlay?: ReactNode }) {
   const ui = useUI();
-  // Agents you're talking to don't wander off.
-  const busy = [ui.card, ui.win?.id].filter(Boolean) as string[];
+  const { s } = useSim();
+  // Agents you're talking to don't wander off, and neither do you.
+  const busy = [ui.card, ui.win?.id, s.me].filter(Boolean) as string[];
   useEngine(busy);
 
   useEffect(() => {
@@ -48,23 +60,46 @@ function DesktopShell({ overlay }: { overlay?: ReactNode }) {
     <div className="fixed inset-0 overflow-hidden bg-[#e9e3d8]">
       <World />
       <TopBar />
+      <CallDock />
       <Toasts />
       <PanelRouter />
+      <ChatDock />
       <WindowRouter />
+      <LiveSync />
+      <JoinGate />
       {overlay}
     </div>
   );
 }
 
+/** Runs once when the office opens (used by /start to join as someone). */
+function Boot({ fn }: { fn: (d: Dispatch<Action>) => void }) {
+  const { d } = useSim();
+  const ran = useRef(false);
+  useEffect(() => {
+    if (ran.current) return;
+    ran.current = true;
+    fn(d);
+  }, [fn, d]);
+  return null;
+}
+
 /** The office. `overlay` renders inside the app (used by the guided tour). */
-export function OfficeApp({ overlay }: { overlay?: ReactNode } = {}) {
+export function OfficeApp({ overlay, boot }: { overlay?: ReactNode; boot?: (d: Dispatch<Action>) => void } = {}) {
   const [ok, setOk] = useState(false);
   useEffect(() => {
+    // The app has desks for people that the landing pages don't.
+    setAppLayout(true);
     const t = setTimeout(() => setOk(true), 0);
-    return () => clearTimeout(t);
+    return () => {
+      clearTimeout(t);
+      setAppLayout(false);
+      ROOMS.ceo.name = "Your office";
+    };
   }, []);
   return (
     <SimProvider>
+      {boot && <Boot fn={boot} />}
       <UIProvider>{ok ? <Shell overlay={overlay} /> : <div className="fixed inset-0 bg-[#e9e3d8]" />}</UIProvider>
     </SimProvider>
   );

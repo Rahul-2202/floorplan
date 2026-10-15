@@ -1,3 +1,4 @@
+import type { Look } from "@/office/sprites";
 import type { AgentStatus, Pt } from "@/office/types";
 
 export type RoomKey = "dev" | "marketing";
@@ -81,6 +82,10 @@ export interface RoomConfig {
   merge: "approval" | "head";
   norms: string[];
   channel: string;
+  /** The human who owns the room. Agent heads report to them. */
+  lead?: string;
+  /** Who the agent head reports to. */
+  reportsTo?: "lead" | "ceo";
 }
 
 export type OutputKind = "pr" | "ticket" | "post" | "video" | "report" | "design" | "blog" | "deploy";
@@ -159,9 +164,11 @@ export interface InboxItem {
   sub: string;
   priority: "high" | "normal" | "low";
   at: string;
-  ref?: { type: "task" | "output" | "event"; id: string };
+  ref?: { type: "task" | "output" | "event" | "request" | "person"; id: string };
   resolved?: boolean;
   batched?: boolean;
+  /** Who it's for. Unset: worked out from the hierarchy. */
+  to?: string[];
 }
 
 export interface Toast {
@@ -177,7 +184,7 @@ export interface Version {
   who: string;
   summary: string;
   changes: string[];
-  snapshot: { configs: Record<string, AgentConfig>; rooms: Record<RoomKey, RoomConfig>; locked: LockedRule[] };
+  snapshot: { configs: Record<string, AgentConfig>; rooms: Record<RoomKey, RoomConfig>; locked: LockedRule[]; org?: OrgRules };
 }
 
 export interface LockedRule {
@@ -213,6 +220,7 @@ export type PanelKey =
   | "memory"
   | "inbox"
   | "governance"
+  | "people"
   | "room";
 
 export interface Pending {
@@ -225,5 +233,92 @@ export interface Pending {
     rooms: Partial<Record<RoomKey, Partial<RoomConfig>>>;
     locked: LockedRule[];
     hire: { id: string; room: RoomKey };
+    org: Partial<OrgRules>;
   }>;
 }
+
+/* ----------------------------------------------------------------- people */
+
+export type PersonRole = "ceo" | "lead" | "member";
+export type Presence = "online" | "away" | "focus" | "call" | "offline";
+
+export interface Person {
+  id: string;
+  name: string;
+  full: string;
+  title: string;
+  role: PersonRole;
+  /** null: in the lobby, waiting for a room. */
+  room: string | null;
+  presence: Presence;
+  email: string;
+  joined: string;
+  /** The invite they joined with. */
+  via?: string;
+  /** Where they sit when they have no desk of their own. */
+  spot?: string;
+  /** A real person connected live (not simulated). */
+  real?: boolean;
+  look?: Look;
+}
+
+export interface Invite {
+  code: string;
+  kind: "office" | "room";
+  room?: RoomKey;
+  role: "member" | "lead";
+  by: string;
+  uses: number;
+  max: number;
+  expires: string;
+  revoked?: boolean;
+}
+
+export interface EmailInvite {
+  id: string;
+  email: string;
+  name: string;
+  room: string | null;
+  by: string;
+  at: string;
+  status: "sent" | "joined";
+}
+
+export interface AgentRequest {
+  id: string;
+  role: string;
+  room: RoomKey;
+  by: string;
+  why: string;
+  at: string;
+  ada: "pending" | "approved" | "declined";
+  ceo: "pending" | "approved" | "declined";
+  adaNote?: string;
+  hired?: string;
+}
+
+export interface OrgRules {
+  /** Who can change a room's spec and rules. */
+  roomEdit: "room" | "lead";
+  /** Who members can message directly. */
+  memberReach: "anyone" | "room+leads" | "room";
+  /** Leads can reach any person or room. */
+  leadReach: "anyone" | "leads";
+  /** New work for another room goes through. */
+  crossRoom: "lead" | "anyone";
+  /** Who can generate room invite links. */
+  roomLinks: "leads" | "ceo";
+  /** Agents can join people's calls and chats when mentioned. */
+  agentsInCalls: boolean;
+}
+
+export interface PMsg {
+  id: string;
+  who: string;
+  text: string;
+  t: string;
+  /** Agents that joined the thread. */
+  agent?: boolean;
+}
+
+export type ChannelKey = "general" | `room:${RoomKey}` | `dm:${string}`;

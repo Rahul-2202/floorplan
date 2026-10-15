@@ -49,7 +49,7 @@ export function ReadBack({ pending, onClose, onApplied }: { pending: Pending | n
                   onClick={() => {
                     setItems(pending.items);
                     d({ type: "propose", pending });
-                    d({ type: "applyPending", who: "You" });
+                    d({ type: "applyPending", who: s.me === "you" ? "You" : (s.people[s.me]?.name ?? "You") });
                     setDone((s.versions[0]?.v ?? 0) + 1);
                     onApplied?.();
                   }}

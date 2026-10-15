@@ -1,5 +1,8 @@
 import { CAST } from "@/office/layout";
+import { requestAgent } from "./actions";
 import { DAYS } from "./data/calendar";
+import { inboxFor } from "./people";
+import { roomName } from "./store";
 import type { Action, SimState } from "./store";
 import type { AgentConfig, ChatCard, Pending, RoomKey, Task } from "./types";
 
@@ -97,12 +100,83 @@ const addMinutes = (hhmm: string, mins: number) => {
   return `${String(Math.floor(tot / 60)).padStart(2, "0")}:${String(tot % 60).padStart(2, "0")}`;
 };
 
-export const ADA_CHIPS = ["What needs me today?", "What's blocking dev?", "Ask marketing for 3 launch tweets", "Move the video review to tomorrow 10am", "Give the tester merge rights for hotfixes", "What did we decide about SMS?"];
+export const ADA_CHIPS = ["What needs me today?", "What's blocking dev?", "Put Jordan in Marketing", "Who's in Development?", "Ask marketing for 3 launch tweets", "Move the video review to tomorrow 10am", "Give the tester merge rights for hotfixes", "What did we decide about SMS?"];
+
+const PERSON_ROOMS: [string, string[]][] = [
+  ["dev", ["dev", "development", "engineering"]],
+  ["marketing", ["marketing"]],
+  ["sales", ["sales"]],
+  ["legal", ["legal"]],
+  ["finance", ["finance"]],
+];
+
+/* ------------------------------------------------------------------ people */
+
+function peopleReply(t: string, s: SimState): Reply | null {
+  const ceo = s.me === "you";
+  const person = Object.values(s.people).find((p) => p.id !== "you" && new RegExp(`\\b${p.name.toLowerCase()}\\b`).test(t));
+  const room = PERSON_ROOMS.find(([, w]) => w.some((x) => new RegExp(`\\b${x}\\b`).test(t)))?.[0];
+
+  // "Put Jordan in Marketing", "move Sam to marketing", "assign Jordan to sales"
+  if (person && room && /\b(put|move|assign|add|place|give)\b/.test(t)) {
+    if (!ceo) return { text: `Only the CEO can move people between rooms. I've noted that you'd like ${person.name} in ${roomName(room)} and passed it on.` };
+    if (room !== "dev" && room !== "marketing" && !s.extraRooms.includes(room))
+      return { text: `${roomName(room)} isn't set up yet. Want me to add the room first? Then ${person.name} can join it.`, chips: [`Put ${person.name} in Marketing`] };
+    const lead = /\b(as|the) (lead|head)\b/.test(t);
+    return {
+      text: `Done. ${person.name} is joining ${roomName(room)}${lead ? " as the lead" : ""}. I've briefed the room${(room === "dev" || room === "marketing") && s.rooms[room].lead && !lead ? ` and told ${name(s.rooms[room].lead!)}` : ""}.`,
+      effect: (d) => d({ type: "assignPerson", id: person.id, room, role: lead ? "lead" : undefined, by: "ada" }),
+    };
+  }
+
+  // Invites
+  if (/\binvit/.test(t) || has(t, "invite code", "office code", "join link", "room link")) {
+    const code = s.invites.find((i) => i.kind === "office" && !i.revoked);
+    if (!ceo) {
+      const mine = s.people[s.me]?.room;
+      const link = s.invites.find((i) => i.kind === "room" && i.room === mine && !i.revoked);
+      return { text: link ? `Your room link is ${link.code}. Anyone who uses it joins ${roomName(mine)} directly.` : "Only the CEO and room leads hand out invites. I can ask your lead for a room link.", ui: { panel: ["people", "invites"] } };
+    }
+    return {
+      text: code ? `The office code is ${code.code} (${code.uses} of ${code.max} used, expires ${code.expires}). People who join with it wait in the lobby until you or I give them a room. Room links skip the lobby.` : "There's no active office code. Opening invites so you can create one.",
+      ui: { panel: ["people", "invites"] },
+    };
+  }
+
+  // "Who's in dev?"
+  if (room && /\bwho('s| is| are)?\b/.test(t) && (room === "dev" || room === "marketing")) {
+    const ppl = Object.values(s.people).filter((p) => p.room === room);
+    const r = s.rooms[room];
+    return {
+      text: `${roomName(room)}: ${ppl.map((p) => `${p.name} (${p.role === "lead" ? "lead" : p.title.toLowerCase()})`).join(", ") || "no people yet"}, plus ${r.members.length + 1} agents. The ${name(r.head)} reports to ${r.lead && r.reportsTo !== "ceo" ? name(r.lead) : "the CEO"}.`,
+      card: { kind: "list", title: roomName(room), items: [...ppl.map((p) => ({ who: p.id, text: p.full, sub: p.title })), ...[r.head, ...r.members].map((a) => ({ who: a, text: name(a), sub: "Agent" }))] },
+    };
+  }
+
+  // Lobby
+  if (has(t, "lobby", "waiting for a room", "unassigned")) {
+    const w = Object.values(s.people).filter((p) => !p.room && p.role !== "ceo");
+    return { text: w.length ? `${w.map((p) => p.name).join(" and ")} ${w.length > 1 ? "are" : "is"} in the lobby.${ceo ? " Say where they should go." : ""}` : "Nobody's waiting in the lobby.", chips: w.length && ceo ? [`Put ${w[0].name} in Marketing`] : undefined };
+  }
+
+  // Reporting lines
+  if (has(t, "report to", "reports to", "my lead", "hierarchy", "who's my boss", "who is my boss")) {
+    const p = s.people[s.me];
+    const to = (r: RoomKey) => (s.rooms[r].lead && s.rooms[r].reportsTo !== "ceo" ? name(s.rooms[r].lead!) : "you");
+    if (!p || p.role === "ceo") return { text: `The PM reports to ${to("dev")}, the Strategist to ${to("marketing")}. The leads and I report to you.`, ui: { panel: ["people", "hierarchy"] } };
+    if (!p.room) return { text: "You'll report to your room's lead once the CEO gives you a room." };
+    const lead = s.rooms[p.room as RoomKey]?.lead;
+    return { text: p.role === "lead" ? `You report to the CEO. The ${name(s.rooms[p.room as RoomKey].head)} reports to you.` : `You report to ${lead ? name(lead) : "the CEO"}.`, ui: { panel: ["people", "hierarchy"] } };
+  }
+  return null;
+}
 
 /* -------------------------------------------------------------------- Ada */
 
 export function adaReply(raw: string, s: SimState): Reply {
   const t = raw.toLowerCase().trim();
+  const ppl = peopleReply(t, s);
+  if (ppl) return ppl;
 
   if (/^(hi|hey|hello|morning|good morning)\b/.test(t))
     return { text: "Morning! Launch is tomorrow. Three things need you today, and the readiness review is at 11:00.", chips: ["What needs me today?", "Summarise yesterday"] };
@@ -117,7 +191,7 @@ export function adaReply(raw: string, s: SimState): Reply {
 
   // briefing / inbox
   if (has(t, "needs me", "need me", "briefing", "inbox", "what's up", "whats up", "today")) {
-    const open = s.inbox.filter((i) => !i.resolved && !i.batched);
+    const open = inboxFor(s).open.filter((i) => !i.batched);
     return {
       text: open.length ? `${open.length} things need you. I've put the launch blockers first:` : "Nothing needs you right now. I'll ping you if that changes.",
       card: open.length ? { kind: "list", title: "Needs you", items: open.map((i) => ({ who: i.from, text: i.title, sub: i.sub })) } : undefined,
@@ -125,6 +199,7 @@ export function adaReply(raw: string, s: SimState): Reply {
     };
   }
   if (has(t, "open my inbox", "show inbox")) return { text: "Opening your inbox.", ui: { panel: ["inbox"] } };
+  if (has(t, "my requests", "agent requests")) return { text: "Here are the agent requests.", ui: { panel: ["people", "requests"] } };
 
   // blockers
   if (has(t, "block", "stuck", "waiting on")) {
@@ -204,6 +279,16 @@ export function adaReply(raw: string, s: SimState): Reply {
     const room: RoomKey = findRoom(t) ?? (has(t, "design", "seo", "writer") ? "marketing" : "dev");
     const role = (t.match(/(?:hire|add)\s+(?:a|an|another)\s+([a-z ]+?)(?:\s+(?:to|for|in)\s+|$)/)?.[1] ?? "specialist").trim();
     const pretty = role.replace(/\b\w/g, (c) => c.toUpperCase());
+    if (s.me !== "you") {
+      const mine = (s.people[s.me]?.room as RoomKey | null) ?? room;
+      return {
+        text: `New agents need the CEO's yes, so I've logged it as a request for a ${role} in ${roomName(mine)}. I'll review it against the budget now, then it goes to the CEO.`,
+        effect: (d, st) => {
+          requestAgent(st, d, { role: pretty, room: mine === "marketing" ? "marketing" : "dev", why: raw });
+        },
+        chips: ["Show my requests"],
+      };
+    }
     return {
       text: `Here's how I'd set up a ${role} in ${room === "dev" ? "Development" : "Marketing"}. Confirm and they'll walk in.`,
       pending: {

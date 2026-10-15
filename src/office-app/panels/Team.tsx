@@ -6,6 +6,8 @@ import { RuntimeBadge } from "@/components/ui";
 import { CAST, ROOMS } from "@/office/layout";
 import { ROLE_TEMPLATES } from "@/sim/data/agents";
 import { ROOM_TEMPLATES } from "@/sim/data/rooms";
+import { requestAgent } from "@/sim/actions";
+import { can, isCeo } from "@/sim/people";
 import { EXTRA_ROOM_AGENTS, useSim } from "@/sim/store";
 import type { Pending, RoomKey } from "@/sim/types";
 import { Btn, Dot, Face, Section, Segmented } from "../bits";
@@ -70,8 +72,8 @@ export function TeamPanel({ initial }: { initial?: string }) {
         onChange={setMode}
         options={[
           { v: "org", l: "Org chart" },
-          { v: "hire", l: "Hire an agent" },
-          { v: "room", l: "Add a room" },
+          { v: "hire", l: isCeo(s) ? "Hire an agent" : "Request an agent" },
+          ...(can(s, "addRoom") ? [{ v: "room" as const, l: "Add a room" }] : []),
         ]}
       />
 
@@ -81,9 +83,12 @@ export function TeamPanel({ initial }: { initial?: string }) {
             <div className="flex items-center gap-3">
               <Face id="you" size={36} />
               <div className="flex-1">
-                <div className="text-[13.5px] font-semibold text-ink">You · CEO</div>
-                <div className="text-[11.5px] text-muted">Decides. Locked rules, approvals, meetings.</div>
+                <div className="text-[13.5px] font-semibold text-ink">{isCeo(s) ? "You · CEO" : "CEO"}</div>
+                <div className="text-[11.5px] text-muted">Decides. Locked rules, approvals, new agents, meetings.</div>
               </div>
+              <button onClick={() => ui.openPanel("people", "hierarchy")} className="text-[12px] font-semibold text-ink hover:underline">
+                Hierarchy →
+              </button>
             </div>
             <div className="mt-2 border-t border-[#f3cfb6] pt-2">
               <AgentRow id="ada" />
@@ -100,6 +105,27 @@ export function TeamPanel({ initial }: { initial?: string }) {
               }
             >
               <div className="rounded-[18px] bg-white p-1.5 ring-1 ring-black/[0.06]">
+                {r.lead && (
+                  <div className="mb-1 flex items-center gap-2.5 rounded-[14px] bg-[#eef2fc] px-2 py-2">
+                    <Face id={r.lead} size={32} />
+                    <div className="min-w-0 flex-1">
+                      <div className="flex items-center gap-1.5 text-[13px] font-semibold text-ink">
+                        {s.people[r.lead]?.full ?? nameOf(r.lead)}
+                        <span className="rounded bg-[#2b4fb8] px-1 text-[9px] font-bold uppercase text-white">Lead</span>
+                      </div>
+                      <div className="truncate text-[11.5px] text-[#21409a]">{r.reportsTo === "ceo" ? "Owns the room · the head reports to the CEO" : `The ${nameOf(r.head)} reports to ${s.people[r.lead]?.name ?? "them"}`}</div>
+                    </div>
+                    <span className="flex -space-x-1">
+                      {Object.values(s.people)
+                        .filter((p) => p.room === r.id && p.id !== r.lead)
+                        .map((p) => (
+                          <span key={p.id} className="rounded-[8px] ring-2 ring-[#eef2fc]" title={p.full}>
+                            <Face id={p.id} size={22} />
+                          </span>
+                        ))}
+                    </span>
+                  </div>
+                )}
                 <AgentRow id={r.head} />
                 <div className="ml-6 border-l-2 border-black/[0.06] pl-1.5">
                   {r.members.map((m) => (
@@ -143,6 +169,9 @@ export function TeamPanel({ initial }: { initial?: string }) {
           </Section>
           <div className="grid grid-cols-2 gap-3">
             <Section title="Room">
+              {!isCeo(s) ? (
+                <div className="text-[12.5px] font-semibold text-ink">{s.people[s.me]?.room === "marketing" ? "Marketing" : s.people[s.me]?.room ? "Development" : "Join a room first"}</div>
+              ) : (
               <Segmented
                 size="sm"
                 value={hireRoom}
@@ -152,6 +181,7 @@ export function TeamPanel({ initial }: { initial?: string }) {
                   { v: "marketing", l: "Marketing" },
                 ]}
               />
+              )}
             </Section>
             <Section title="Runtime">
               <Segmented
@@ -165,19 +195,31 @@ export function TeamPanel({ initial }: { initial?: string }) {
               />
             </Section>
           </div>
+          {!isCeo(s) && (
+            <div className="rounded-[14px] bg-[#eef2fc] px-3.5 py-2.5 text-[12.5px] text-[#21409a]">
+              Adding an agent sends a request to Ada and the CEO. Ada checks the budget, then the CEO approves.
+            </div>
+          )}
           <Btn
             tone="dark"
             className="!py-2.5"
-            onClick={() =>
+            disabled={!isCeo(s) && !s.people[s.me]?.room}
+            onClick={() => {
+              if (!isCeo(s)) {
+                const mine = s.people[s.me]?.room === "marketing" ? "marketing" : "dev";
+                requestAgent(s, d, { role, room: mine, why: `Asked for from the team panel by ${s.people[s.me]?.name}.` });
+                ui.openPanel("people", "requests");
+                return;
+              }
               setPending({
                 id: `hire-${s.clock}`,
                 summary: `Hire a ${role.toLowerCase()} into ${hireRoom === "dev" ? "Development" : "Marketing"}`,
                 items: [`Add ${role} to ${hireRoom === "dev" ? "Development" : "Marketing"}, reporting to ${nameOf(s.rooms[hireRoom].head)}`, `Runtime: ${runtime}`, "Can't post publicly or merge to main", "Budget: $30 a week from the room's budget", "Memory set up from the room charter"],
                 apply: { hire: { id: role.toLowerCase(), room: hireRoom } },
-              })
-            }
+              });
+            }}
           >
-            Review and hire
+            {isCeo(s) ? "Review and hire" : "Send request to Ada and the CEO"}
           </Btn>
           <div className="text-[12px] text-muted">Or just tell Ada: “Add a designer to marketing”.</div>
         </div>

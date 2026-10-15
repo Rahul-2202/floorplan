@@ -159,5 +159,18 @@ export function usePlayer(start: Pt, blocked: () => boolean) {
 
   const pos = useCallback((): Pt => [x.get() / TILE, y.get() / TILE], [x, y]);
 
-  return { x, y, walking, target, goTo, pos };
+  /** Teleport (used when you switch who you're playing). */
+  const jump = useCallback(
+    (tx: number, ty: number) => {
+      path.current = [];
+      arrive.current = null;
+      keys.current.clear();
+      setTarget(null);
+      x.set(tx * TILE);
+      y.set(ty * TILE);
+    },
+    [x, y],
+  );
+
+  return { x, y, walking, target, goTo, pos, jump };
 }

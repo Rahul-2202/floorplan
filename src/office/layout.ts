@@ -149,7 +149,16 @@ export interface Furniture {
   w?: number;
   h?: number;
   tint?: string;
+  /** Only in the walkable office app (desks for people). */
+  app?: boolean;
 }
+
+/** The office app adds desks for people; the landing pages don't show them. */
+export const layoutMode = { app: false };
+export function setAppLayout(on: boolean) {
+  layoutMode.app = on;
+}
+export const inLayout = (f: Furniture) => !f.app || layoutMode.app;
 
 export const SIZE: Record<FurnitureKind, [number, number]> = {
   desk: [32, 22],
@@ -257,6 +266,12 @@ export const FURNITURE: Furniture[] = [
   { id: "fn-an", room: "finance", kind: "desk", x: 42.5, y: 21.5 },
   { id: "fn-safe", room: "finance", kind: "safe", x: 46.8, y: 23.5 },
 
+  // People's desks (office app only)
+  { id: "dev-priya", room: "dev", kind: "desk", x: 32, y: 5.5, app: true },
+  { id: "dev-sam", room: "dev", kind: "desk", x: 24.5, y: 7.5, app: true },
+  { id: "mkt-marco", room: "marketing", kind: "desk", x: 38, y: 7.5, app: true },
+  { id: "mkt-lena", room: "marketing", kind: "desk", x: 43.2, y: 10, app: true },
+
   // Hallway
   { id: "hall-cooler", room: "hall", kind: "cooler", x: 24.6, y: 12.05 },
   { id: "hall-plant", room: "hall", kind: "plant", x: 0.05, y: 12.3 },
@@ -332,6 +347,22 @@ export const SPOTS: Record<string, Pt> = {
   "seat:book": seat("fn-book"),
   "seat:analyst": seat("fn-an"),
 
+  // People
+  "seat:priya": seat("dev-priya"),
+  "seat:sam": seat("dev-sam"),
+  "seat:marco": seat("mkt-marco"),
+  "seat:lena": seat("mkt-lena"),
+  "dev:new": [27, 6.3],
+  "mkt:new": [41, 6.4],
+  "dev:new2": [27, 10.2],
+  "mkt:new2": [38.6, 10.4],
+  "sales:new": [17.5, 25],
+  "legal:new": [28, 19],
+  "fin:new": [40, 19],
+  "lobby:1": [2.6, 13.5],
+  "lobby:2": [4, 13.6],
+  "lobby:3": [5.4, 13.5],
+
   // Hallway
   "hall:entry": [0.75, 13.5],
   "hall:mid": [25, 13.6],
@@ -353,6 +384,10 @@ export interface CastMember {
   head?: boolean;
   runtime?: string;
   look: Look;
+  /** A person, not an agent. */
+  human?: boolean;
+  /** A real person, connected live. */
+  real?: boolean;
 }
 
 export const CAST: Record<string, CastMember> = {
@@ -443,6 +478,54 @@ export const CAST: Record<string, CastMember> = {
     room: "marketing",
     runtime: "Claude Code",
     look: { skin: "#d4986f", hair: "#3a2a22", style: "bob", shirt: "#2f3440", accent: "#5a6170", pants: "#4a3f3a", glasses: true },
+  },
+  priya: {
+    id: "priya",
+    name: "Priya",
+    role: "Engineering lead",
+    room: "dev",
+    human: true,
+    look: { skin: "#b97a55", hair: "#1a1513", style: "long", shirt: "#2b4fb8", accent: "#8fa6e8", pants: "#2b2f36", glasses: true },
+  },
+  sam: {
+    id: "sam",
+    name: "Sam",
+    role: "Software engineer",
+    room: "dev",
+    human: true,
+    look: { skin: "#7a4b30", hair: "#1a1513", style: "buzz", shirt: "#e8743b", pants: "#34495e", prop: "mug" },
+  },
+  marco: {
+    id: "marco",
+    name: "Marco",
+    role: "Marketing lead",
+    room: "marketing",
+    human: true,
+    look: { skin: "#e6b590", hair: "#3a2a22", style: "curly", shirt: "#1f7a6d", accent: "#7cc4b8", pants: "#2f3440" },
+  },
+  lena: {
+    id: "lena",
+    name: "Lena",
+    role: "Content designer",
+    room: "marketing",
+    human: true,
+    look: { skin: "#f3cfb1", hair: "#2b2522", style: "bob", shirt: "#d94f7a", pants: "#3a3340", glasses: true },
+  },
+  jordan: {
+    id: "jordan",
+    name: "Jordan",
+    role: "Account executive",
+    room: "ceo",
+    human: true,
+    look: { skin: "#d9a27c", hair: "#c9612f", style: "short", shirt: "#6b7a3a", pants: "#2b2f36" },
+  },
+  nina: {
+    id: "nina",
+    name: "Nina",
+    role: "Brand designer",
+    room: "marketing",
+    human: true,
+    look: { skin: "#a86b48", hair: "#2b2522", style: "pony", shirt: "#7b6cd9", accent: "#c9bff5", pants: "#2f3440" },
   },
   lead: {
     id: "lead",

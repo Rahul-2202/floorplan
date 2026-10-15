@@ -19,6 +19,15 @@ const GROUPS: { t: string; acts: Act[] }[] = [
     ],
   },
   {
+    t: "People",
+    acts: [
+      { l: "Invite people", panel: ["people", "invites"] },
+      { l: "Assign the lobby", panel: ["people"] },
+      { l: "Agent requests", panel: ["people", "requests"] },
+      { l: "Hierarchy", panel: ["people", "hierarchy"] },
+    ],
+  },
+  {
     t: "Governance",
     acts: [
       { l: "Permissions", panel: ["governance", "permissions"] },

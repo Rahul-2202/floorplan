@@ -1,4 +1,4 @@
-import { BLOCK, FURNITURE, ROOMS, WORLD } from "./layout";
+import { BLOCK, FURNITURE, ROOMS, WORLD, inLayout, layoutMode } from "./layout";
 import type { Pt } from "./types";
 
 // Walk grid at half-tile resolution.
@@ -6,7 +6,11 @@ const R = 2;
 const GW = WORLD.w * R;
 const GH = WORLD.h * R;
 
-let grid: Uint8Array | null = null;
+const grids: { site?: Uint8Array; app?: Uint8Array } = {};
+const getGrid = () => {
+  const k = layoutMode.app ? "app" : "site";
+  return (grids[k] ??= buildGrid());
+};
 
 function buildGrid() {
   const g = new Uint8Array(GW * GH);
@@ -41,6 +45,7 @@ function buildGrid() {
   }
 
   for (const f of FURNITURE) {
+    if (!inLayout(f)) continue;
     const b = BLOCK[f.kind];
     if (b) block(f.x + b[0], f.y + b[1], b[2], b[3]);
   }
@@ -51,7 +56,7 @@ const key = (x: number, y: number) => y * GW + x;
 
 /** True when a feet position (in tiles) is free to stand on. */
 export function isWalkable(x: number, y: number) {
-  if (!grid) grid = buildGrid();
+  const grid = getGrid();
   const cx = Math.floor(x * R);
   const cy = Math.floor(y * R);
   if (cx < 0 || cy < 0 || cx >= GW || cy >= GH) return false;
@@ -59,8 +64,7 @@ export function isWalkable(x: number, y: number) {
 }
 
 export function findPath(from: Pt, to: Pt): Pt[] {
-  if (!grid) grid = buildGrid();
-  const g = grid;
+  const g = getGrid();
   const sx = Math.min(GW - 1, Math.max(0, Math.floor(from[0] * R)));
   const sy = Math.min(GH - 1, Math.max(0, Math.floor(from[1] * R)));
   const tx = Math.min(GW - 1, Math.max(0, Math.floor(to[0] * R)));

@@ -61,6 +61,12 @@ export function AgentCard({ id, summoned, onSendBack, onClose }: { id: string; s
           </div>
           <div className="mt-0.5 text-[12.5px] text-muted">
             {m?.role} · {ROOM_LABEL[m?.room ?? "dev"]}
+            {(m?.room === "dev" || m?.room === "marketing") && (
+              <>
+                {" · reports to "}
+                <b className="font-semibold text-ink-2">{isHead ? (s.rooms[m.room].lead && s.rooms[m.room].reportsTo !== "ceo" ? nameOf(s.rooms[m.room].lead!) : "the CEO") : nameOf(s.rooms[m.room].head)}</b>
+              </>
+            )}
           </div>
           <div className="mt-2 flex flex-wrap items-center gap-1.5">
             <span className="inline-flex items-center gap-1.5 rounded-full bg-[#f6f5f2] px-2.5 py-[3px] text-[11.5px] font-semibold text-ink-2">

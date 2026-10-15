@@ -3,7 +3,8 @@
 import { useMemo, useState } from "react";
 import { CAST } from "@/office/layout";
 import { findRoom, newTask } from "@/sim/intents";
-import { useSim } from "@/sim/store";
+import { can } from "@/sim/people";
+import { clockLabel, useSim } from "@/sim/store";
 import type { RoomKey, Task } from "@/sim/types";
 import { Btn, Face, Segmented, Toggle, Window } from "../bits";
 import { useUI } from "../ui";
@@ -27,14 +28,25 @@ export function AssignWindow({ agent }: { agent?: string }) {
   const [dod, setDod] = useState("");
   const [linear, setLinear] = useState(true);
 
+  const allowed = can(s, "assignTask", room);
+  const from = s.me === "you" ? "the CEO" : (s.people[s.me]?.name ?? "the CEO");
+
   const submit = () => {
     if (!title.trim()) return;
+    if (!allowed) {
+      // New work for another room goes through its lead.
+      const lead = cfg.lead ?? "you";
+      d({ type: "addInbox", item: { id: `i-xroom-${s.clock}-${s.me}`, kind: "approval", from: s.me, title: `${from} asks ${cfg.name} for: ${title.trim()}`, sub: `${priority} · due ${due}. New work for your room comes through you.`, priority: "normal", at: clockLabel(s.clock, false), to: [lead] } });
+      d({ type: "toast", toast: { id: `xr-${s.clock}`, who: lead, text: `Sent to ${nameOf(lead)}, ${cfg.name}'s lead. New work for their room goes through them.` } });
+      ui.closeWin();
+      return;
+    }
     const t = newTask(s, title.trim(), room, who, "you", { priority, due, dod: dod || cfg.dod, step: "Waiting for the head to plan it" });
     d({ type: "addTask", task: t });
     const head = cfg.head;
-    d({ type: "live", id: head, patch: { bubble: `New from the CEO: ${t.key}. Planning it.` } });
+    d({ type: "live", id: head, patch: { bubble: `New from ${from}: ${t.key}. Planning it.` } });
     d({ type: "toast", toast: { id: `as-${t.id}`, who: head, text: `Got it: ${t.key} ${t.title}${who !== head ? ` → ${nameOf(who)}` : ""}`, action: { label: "Dashboard", panel: "dashboard" } } });
-    if (linear) d({ type: "convo", id: room === "dev" ? "c-dev" : "c-mkt", msg: { who: head, t: "now", text: `New from the CEO: ${t.key} ${t.title}. ${who !== head ? `Assigning to ${nameOf(who)}.` : "Planning it."}` } });
+    if (linear) d({ type: "convo", id: room === "dev" ? "c-dev" : "c-mkt", msg: { who: head, t: "now", text: `New from ${from}: ${t.key} ${t.title}. ${who !== head ? `Assigning to ${nameOf(who)}.` : "Planning it."}` } });
     // The head plans it, then the owner picks it up.
     setTimeout(() => {
       d({ type: "live", id: head, patch: { bubble: null } });
@@ -55,10 +67,10 @@ export function AssignWindow({ agent }: { agent?: string }) {
       footer={
         <div className="flex items-center justify-between gap-3 border-t border-black/[0.06] px-4 py-3">
           <span className="flex items-center gap-2 text-[12px] text-muted">
-            <Face id={who} size={22} /> {who === cfg.head ? `${nameOf(who)} will plan it into the room's work` : `${nameOf(who)} gets it, ${nameOf(cfg.head)} is copied`}
+            <Face id={allowed ? who : (cfg.lead ?? "you")} size={22} /> {!allowed ? `New work for ${cfg.name} goes through ${nameOf(cfg.lead ?? "you")}, its lead` : who === cfg.head ? `${nameOf(who)} will plan it into the room's work` : `${nameOf(who)} gets it, ${nameOf(cfg.head)} is copied`}
           </span>
           <Btn tone="dark" onClick={submit} disabled={!title.trim()}>
-            Assign
+            {allowed ? "Assign" : `Send to ${nameOf(cfg.lead ?? "you")}`}
           </Btn>
         </div>
       }

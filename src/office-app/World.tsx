@@ -7,10 +7,14 @@ import { CAST, ROOMS, SPOTS, TILE, WORLD, spot } from "@/office/layout";
 import { Office } from "@/office/Office";
 import { personSprite } from "@/office/sprites";
 import type { Pt, Scene } from "@/office/types";
-import { useSim } from "@/sim/store";
+import { myPublic, relayCmd } from "@/live/LiveSync";
+import { myPos } from "@/live/state";
+import { NEW_SPOT } from "@/sim/data/people";
+import { useSim, type SimState } from "@/sim/store";
 import { AgentCard } from "./cards/AgentCard";
 import { AdaCard } from "./cards/AdaCard";
 import { HoverTag } from "./cards/HoverTag";
+import { PersonCard } from "./cards/PersonCard";
 import { RoomBar } from "./RoomBar";
 import { useUI } from "./ui";
 import { nearestFree, usePlayer } from "./usePlayer";
@@ -18,13 +22,18 @@ import { roomAt, syncHires } from "./who";
 
 const NEAR = 1.9;
 
-export function homeOf(id: string, hires: { id: string; spot: string }[]) {
+export function homeOf(id: string, s: Pick<SimState, "hires" | "people">) {
   if (id === "ada") return "ada:home";
-  return hires.find((h) => h.id === id)?.spot ?? `seat:${id}`;
+  const p = s.people[id];
+  if (p) {
+    if (SPOTS[`seat:${id}`] && CAST[id]?.room === p.room) return `seat:${id}`;
+    return p.spot ?? (p.room ? (NEW_SPOT[p.room] ?? "hall:mid") : "lobby:1");
+  }
+  return s.hires.find((h) => h.id === id)?.spot ?? `seat:${id}`;
 }
 
-function Player({ x, y, walking }: { x: ReturnType<typeof usePlayer>["x"]; y: ReturnType<typeof usePlayer>["y"]; walking: boolean }) {
-  const look = CAST.you.look;
+function Player({ x, y, walking, who, bubble }: { x: ReturnType<typeof usePlayer>["x"]; y: ReturnType<typeof usePlayer>["y"]; walking: boolean; who: string; bubble?: string | null }) {
+  const look = (CAST[who] ?? CAST.you).look;
   const sp = personSprite(look);
   const z = useTransform(y, (v) => Math.round(v) + 3);
   return (
@@ -42,8 +51,17 @@ function Player({ x, y, walking }: { x: ReturnType<typeof usePlayer>["x"]; y: Re
           )}
         </div>
         <div className="absolute bottom-full left-1/2" style={{ width: 0 }}>
-          <div className="counter absolute bottom-[3px] left-0 -translate-x-1/2 whitespace-nowrap" style={{ ["--origin" as string]: "50% 100%" }}>
-            <div data-tour="player" className="rounded-full bg-ink px-2 py-[2px] text-[10.5px] font-bold text-white shadow-md">You</div>
+          <div className="counter absolute bottom-[3px] left-0 flex -translate-x-1/2 flex-col items-center gap-1 whitespace-nowrap" style={{ ["--origin" as string]: "50% 100%" }}>
+            <AnimatePresence>
+              {bubble && (
+                <motion.div key={bubble} initial={{ opacity: 0, y: 6, scale: 0.9 }} animate={{ opacity: 1, y: 0, scale: 1 }} exit={{ opacity: 0, scale: 0.95 }} className="rounded-[12px] bg-white px-2.5 py-1 text-[11px] font-semibold text-ink shadow-md ring-1 ring-black/10">
+                  {bubble}
+                </motion.div>
+              )}
+            </AnimatePresence>
+            <div data-tour="player" className="rounded-full bg-ink px-2 py-[2px] text-[10.5px] font-bold text-white shadow-md">
+              You{who !== "you" ? <span className="font-semibold text-white/60"> · {CAST[who]?.name}</span> : null}
+            </div>
           </div>
         </div>
       </div>
@@ -129,7 +147,8 @@ export function World() {
   syncHires(s);
 
   const [zoom, setZoom] = useState(2.8);
-  const player = usePlayer(SPOTS["ceo:visitor"], useCallback(() => false, []));
+  const player = usePlayer(s.me === "you" ? SPOTS["ceo:visitor"] : spot(s.live[s.me]?.at ?? "hall:mid"), useCallback(() => false, []));
+  const meId = s.me;
   const [near, setNear] = useState<string | null>(null);
   const [hover, setHover] = useState<string | null>(null);
   const [room, setRoom] = useState<string | null>("ceo");
@@ -160,19 +179,26 @@ export function World() {
   const goToRef = useRef(player.goTo);
   const summonRef = useRef<(id: string) => void>(() => {});
   const sendBack = (id: string) => {
-    d({ type: "live", id, patch: { at: homeOf(id, s.hires) } });
+    d({ type: "live", id, patch: { at: homeOf(id, s) } });
     setSummoned((v) => v.filter((x) => x !== id));
     if (ui.card === id) ui.setCard(null);
   };
   useLayoutEffect(() => {
     goToRef.current = player.goTo;
     summonRef.current = (id: string) => {
+    // Real people choose for themselves: send them a nudge instead.
+    if (s.people[id]?.real) {
+      relayCmd(s, { type: "ask", from: myPublic(s) }, [id]);
+      d({ type: "toast", toast: { id: `ask-${id}-${s.clock}`, who: "ada", text: `Asked ${s.people[id].name} to come over.` } });
+      return;
+    }
     const [px, py] = player.pos();
     const [ax] = posOf(id);
     const side = ax < px ? -1.3 : 1.3;
     const to = nearestFree(px + side, py);
     const from = posOf(id);
-    d({ type: "live", id, patch: { at: to } });
+    d({ type: "live", id, patch: { at: to, ...(s.people[id] ? { bubble: "Coming!" } : {}) } });
+    if (s.people[id]) setTimeout(() => d({ type: "live", id, patch: { bubble: null } }), 2500);
     setSummoned((v) => (v.includes(id) ? v : [...v, id]));
     const secs = (Math.abs(from[0] - to[0]) + Math.abs(from[1] - to[1])) / 3.4 + 0.4;
     setTimeout(() => {
@@ -190,9 +216,12 @@ export function World() {
   // Proximity + current room
   const check = () => {
     const [px, py] = player.pos();
+    myPos.x = px;
+    myPos.y = py;
     let best: string | null = null;
     let bd = NEAR;
     Object.keys(s.live).forEach((id) => {
+      if (id === meId) return;
       const [ax, ay] = posOf(id);
       const dd = Math.hypot(ax - px, ay - py);
       if (dd < bd) {
@@ -203,6 +232,7 @@ export function World() {
     setNear((v) => (v === best ? v : best));
     const r = roomAt(px, py);
     setRoom((v) => (v === r ? v : r));
+    if (ui.here !== r) ui.setHere(r);
     // Agents you called over head back once you walk away.
     summoned.forEach((id) => {
       const [ax, ay] = posOf(id);
@@ -233,7 +263,7 @@ export function World() {
     closeRef.current = () => {
       const id = ui.card;
       if (id && summoned.includes(id)) {
-        d({ type: "live", id, patch: { at: homeOf(id, s.hires) } });
+        d({ type: "live", id, patch: { at: homeOf(id, s) } });
         setSummoned((v) => v.filter((x) => x !== id));
       }
       ui.setCard(null);
@@ -274,7 +304,9 @@ export function World() {
   const scene: Scene = useMemo(() => {
     const dev = s.tasks.filter((t) => t.room === "dev");
     const agents = Object.fromEntries(
-      Object.entries(s.live).map(([id, l]) => [
+      Object.entries(s.live)
+        .filter(([id]) => id !== s.me)
+        .map(([id, l]) => [
         id,
         { at: l.at, status: l.paused ? "away" : l.status, bubble: l.bubble ?? null, emote: l.emote ?? null, badge: l.queued || null, speed: 1.15 },
       ]),
@@ -300,7 +332,33 @@ export function World() {
       },
       locked: [...(lockedMerge ? (["dev"] as const) : []), ...(lockedPublic ? (["marketing"] as const) : [])],
     } as Scene;
-  }, [s.live, s.tasks, s.locked, s.extraRooms]);
+  }, [s.live, s.tasks, s.locked, s.extraRooms, s.me]);
+
+  // Given a room (by the CEO or Ada): walk there.
+  const myRoom = s.people[s.me]?.room ?? null;
+  const prevRoom = useRef<{ me: string; room: string | null }>({ me: s.me, room: myRoom });
+  useEffect(() => {
+    const p = prevRoom.current;
+    prevRoom.current = { me: s.me, room: myRoom };
+    if (p.me !== s.me || p.room === myRoom || !myRoom) return;
+    const [x, y] = spot(s.people[s.me]?.spot ?? NEW_SPOT[myRoom] ?? "hall:mid");
+    setTimeout(() => player.goTo(x, y), 600);
+    // eslint-disable-next-line react-hooks/exhaustive-deps
+  }, [myRoom, s.me]);
+
+  // Switching who you play: leave the old you where they stood, become the new one.
+  const prevMe = useRef(s.me);
+  useEffect(() => {
+    if (prevMe.current === s.me) return;
+    d({ type: "live", id: prevMe.current, patch: { at: player.pos(), bubble: null } });
+    prevMe.current = s.me;
+    const [x, y] = spot(s.live[s.me]?.at ?? "hall:mid");
+    player.jump(x, y + (s.me === "you" ? 2.8 : 0));
+    ui.setCard(null);
+    setSummoned([]);
+    setTimeout(recenterCam, 0);
+    // eslint-disable-next-line react-hooks/exhaustive-deps
+  }, [s.me]);
 
   const handlers = (id: string) => ({
     onClick: () => openAgent(id),
@@ -376,7 +434,9 @@ export function World() {
         }}
         agentHandlers={handlers}
       >
-        <Player x={player.x} y={player.y} walking={player.walking} />
+        <Player x={player.x} y={player.y} walking={player.walking} who={meId} bubble={s.live[meId]?.bubble} />
+
+        <Lobby waiting={Object.values(s.people).filter((p) => !p.room && p.role !== "ceo").length} />
 
         {player.target && (
           <div className="pointer-events-none absolute" style={{ left: player.target[0] * TILE, top: player.target[1] * TILE, zIndex: 5 }}>
@@ -413,6 +473,8 @@ export function World() {
             <Anchor key={`c-${cardId}`} at={posOf(cardId)} offset={30}>
               {cardId === "ada" ? (
                 <AdaCard onClose={closeCard} />
+              ) : s.people[cardId] ? (
+                <PersonCard id={cardId} summoned={summoned.includes(cardId)} onSendBack={() => sendBack(cardId)} onClose={closeCard} />
               ) : (
                 <AgentCard id={cardId} summoned={summoned.includes(cardId)} onSendBack={() => sendBack(cardId)} onClose={closeCard} />
               )}
@@ -426,7 +488,8 @@ export function World() {
       <Minimap
         px={player.x}
         py={player.y}
-        live={s.live}
+        live={Object.fromEntries(Object.entries(s.live).filter(([id]) => id !== meId))}
+        people={s.people}
         onGo={(x, y) => player.goTo(x, y)}
       />
 
@@ -463,7 +526,18 @@ export function World() {
 
 /* ------------------------------------------------------------------ minimap */
 
-function Minimap({ px, py, live, onGo }: { px: ReturnType<typeof usePlayer>["x"]; py: ReturnType<typeof usePlayer>["y"]; live: Record<string, { at: Pt | string; status: string }>; onGo: (x: number, y: number) => void }) {
+function Lobby({ waiting }: { waiting: number }) {
+  return (
+    <div className="pointer-events-none absolute" style={{ left: 0.7 * TILE, top: 14.35 * TILE, zIndex: 2 }}>
+      <div className="flex items-center gap-[3px] whitespace-nowrap rounded-[2px] border border-[#4a413a]/35 bg-[#f7f1e6] px-[3px] py-[1px] text-[4.5px] font-bold uppercase tracking-[0.14em] text-[#4a413a]">
+        Lobby
+        {waiting ? <span className="rounded-full bg-[#2b4fb8] px-[2.5px] text-[4px] tracking-normal text-white">{waiting} waiting</span> : null}
+      </div>
+    </div>
+  );
+}
+
+function Minimap({ px, py, live, people, onGo }: { px: ReturnType<typeof usePlayer>["x"]; py: ReturnType<typeof usePlayer>["y"]; live: Record<string, { at: Pt | string; status: string }>; people: Record<string, unknown>; onGo: (x: number, y: number) => void }) {
   const W = 200;
   const k = W / WORLD.w;
   const H = WORLD.h * k;
@@ -500,7 +574,7 @@ function Minimap({ px, py, live, onGo }: { px: ReturnType<typeof usePlayer>["x"]
             <span
               key={id}
               className="absolute h-[5px] w-[5px] rounded-full transition-all duration-700"
-              style={{ left: x * k - 2.5, top: y * k - 2.5, background: l.status === "blocked" ? "#d99a2b" : id === "ada" ? "#e8743b" : "#3f9b5f" }}
+              style={{ left: x * k - 2.5, top: y * k - 2.5, background: people[id] ? "#2b4fb8" : l.status === "blocked" ? "#d99a2b" : id === "ada" ? "#e8743b" : "#3f9b5f" }}
             />
           );
         })}

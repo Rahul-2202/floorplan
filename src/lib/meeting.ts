@@ -2,7 +2,7 @@
 
 import { useEffect, useRef, useState } from "react";
 
-export type Speaker = "ada" | "pm" | "you" | "strat" | "be" | "qa" | "fe" | "ops";
+export type Speaker = "ada" | "pm" | "you" | "strat" | "be" | "qa" | "fe" | "ops" | (string & {});
 
 export interface Line {
   who: Speaker;
@@ -20,6 +20,11 @@ const PREFS: Record<string, { names: string[]; pitch: number; rate: number }> = 
   pm: { names: ["Daniel", "Rishi", "Google UK English Male", "Guy", "Arthur", "Oliver", "Aaron", "David"], pitch: 0.95, rate: 1.02 },
   you: { names: ["Alex", "Evan", "Tom", "Nathan", "Google UK English Female", "Jenny", "Fred", "Mark"], pitch: 1.0, rate: 1.0 },
   strat: { names: ["Karen", "Moira", "Serena", "Google UK English Female", "Susan"], pitch: 1.05, rate: 1.03 },
+  priya: { names: ["Veena", "Lekha", "Rishi", "Tessa", "Fiona", "Google UK English Female", "Victoria"], pitch: 1.04, rate: 1.03 },
+  sam: { names: ["Aaron", "Fred", "Ralph", "Google US English", "Junior", "Reed"], pitch: 0.92, rate: 1.04 },
+  marco: { names: ["Luca", "Alice", "Diego", "Jorge", "Eddy", "Rocko", "Google UK English Male"], pitch: 0.97, rate: 1.02 },
+  lena: { names: ["Nicky", "Kathy", "Vicki", "Flo", "Shelley", "Google US English"], pitch: 1.12, rate: 1.05 },
+  jordan: { names: ["Grandpa", "Sandy", "Tom", "Evan", "Google US English"], pitch: 1.0, rate: 1.03 },
 };
 
 let chosen: Record<string, SpeechSynthesisVoice | null> | null = null;
